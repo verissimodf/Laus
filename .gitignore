@@ -1,0 +1,40 @@
+# Ambientes virtuais e pacotes locais (NUNCA no Google Drive)
+# Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Segredos, Chaves e Credenciais
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.secret
+secrets/
+vault/keys/
+
+# Ambientes Virtuais e Dependências (Essencial para o Google Drive)
+.venv/
+venv/
+ENV/
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bancos de Dados Locais e Arquivos Temporários de Teste
+*.sqlite3
+*.db
+tmp/
+temp/
+logs/
+*.log
+
+# Caches de IDEs e Editores
+.idea/
+.vscode/
+.antigravity/
+.DS_Store
+Thumbs.db

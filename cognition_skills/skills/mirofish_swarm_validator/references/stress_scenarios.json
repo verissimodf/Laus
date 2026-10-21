@@ -1,0 +1,28 @@
+{
+  "scenarios": [
+    {
+      "id": "flash_crash_usdt",
+      "name": "Desancoragem Rápida USDT/BRL",
+      "description": "Simula queda abrupta de 4.5% no par USDT/BRL com aumento de 300% no spread de livro L2.",
+      "slippage_multiplier": 3.5,
+      "max_allowed_exposure_usd": 150.0,
+      "required_consensus_score": 0.85
+    },
+    {
+      "id": "latency_spike_500ms",
+      "name": "Degradação Severa de Conectividade",
+      "description": "Simula aumento de RTT para 520ms durante leilão de abertura da B3.",
+      "slippage_multiplier": 2.2,
+      "max_allowed_exposure_usd": 200.0,
+      "required_consensus_score": 0.80
+    },
+    {
+      "id": "high_liquidity_normal",
+      "name": "Condições Normais de Mercado",
+      "description": "Book profundo com spread estável entre 0.65% e 0.95%.",
+      "slippage_multiplier": 1.0,
+      "max_allowed_exposure_usd": 1000.0,
+      "required_consensus_score": 0.70
+    }
+  ]
+}

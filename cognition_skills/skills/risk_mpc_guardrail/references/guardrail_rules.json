@@ -1,0 +1,15 @@
+{
+  "risk_limits": {
+    "max_order_usd": 500.0,
+    "max_slippage_pct": 0.50,
+    "max_daily_drawdown_usd": 250.0,
+    "circuit_breaker_latency_ms": 500,
+    "ntp_drift_threshold_ms": 100,
+    "mpc_threshold": "2-of-3",
+    "mpc_key_shares": [
+      "agent_orchestrator_share_1",
+      "gateway_vault_local_share_2",
+      "offline_recovery_cold_share_3"
+    ]
+  }
+}

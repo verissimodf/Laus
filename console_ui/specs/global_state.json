@@ -1,0 +1,9 @@
+{
+    "kill_switch": false,
+    "last_update": 1792472519.4057302,
+    "status_reason": "Sistema monitorado pelo Watchdog",
+    "metrics": {
+        "heartbeat": "HEALTHY",
+        "ui_template": "awesome-design-md"
+    }
+}

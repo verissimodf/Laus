@@ -1,0 +1,137 @@
+{
+  "registry_version": "1.0.0",
+  "framework": "agentskills.io",
+  "disclosure_strategy": "progressive_disclosure",
+  "description": "Catálogo de habilidades operacionais dos agentes autônomos do ecossistema Laus. Mantido em estado Dormant até o disparo dos gatilhos semânticos.",
+  "skills": [
+    {
+      "id": "macro-brazil",
+      "name": "Macro Brazil & FX Arbitrage",
+      "path": "cognition_skills/skills/macro_brazil/SKILL.md",
+      "pillar": "Pilar 5: Cognition & Skills Hub",
+      "description": "Monitora cotações oficiais do par USD-BRL e validação bancária via AwesomeAPI e BrasilAPI, calculando spreads de arbitragem cambial contra stablecoins.",
+      "triggers": [
+        "cambio",
+        "usd-brl",
+        "awesomeapi",
+        "brasilapi",
+        "spread",
+        "arbitragem",
+        "stablecoin"
+      ],
+      "scripts": [
+        "cognition_skills/skills/macro_brazil/scripts/usd_brl_monitor.py"
+      ],
+      "references": [
+        "cognition_skills/skills/macro_brazil/references/awesomeapi_brasilapi_spec.md"
+      ],
+      "default_state": "dormant"
+    },
+    {
+      "id": "macro-fx-arbitrage",
+      "name": "Macro FX Arbitrage Legacy",
+      "path": "cognition_skills/skills/macro_arbitrage/SKILL.md",
+      "pillar": "Pilar 5: Cognition & Skills Hub",
+      "description": "Executa análise de paridade entre cotações fiat locais (BRL/USD) e pares cripto estáveis (USDT/BRL).",
+      "triggers": [
+        "macro",
+        "fx",
+        "arbitrage"
+      ],
+      "scripts": [],
+      "references": [],
+      "default_state": "dormant"
+    },
+    {
+      "id": "mirofish-swarm-validator",
+      "name": "MiroFish Swarm & Digital Twin Validator",
+      "path": "cognition_skills/skills/mirofish_swarm_validator/SKILL.md",
+      "pillar": "Pilar 2: Laus Quant & Swarm + Pilar 7: Gêmeo Digital",
+      "description": "Orquestra simulação multiagente em sandbox para estressar propostas de ordens contra volatilidade e slippage antes da execução real.",
+      "triggers": [
+        "mirofish",
+        "swarm",
+        "consenso",
+        "stress-test",
+        "digital-twin",
+        "sandbox",
+        "simulacao"
+      ],
+      "scripts": [
+        "cognition_skills/skills/mirofish_swarm_validator/scripts/simulate_consensus.py"
+      ],
+      "references": [
+        "cognition_skills/skills/mirofish_swarm_validator/references/stress_scenarios.json"
+      ],
+      "default_state": "dormant"
+    },
+    {
+      "id": "risk-mpc-guardrail",
+      "name": "Risk Guardrail & MPC Custody",
+      "path": "cognition_skills/skills/risk_mpc_guardrail/SKILL.md",
+      "pillar": "Pilar 3: Gateway Vault + Pilar 6: Infra Resilience",
+      "description": "Regras determinísticas de proteção patrimonial, limites de alocação por operação, Circuit Breaker de latência e assinatura multipartidária MPC/TSS.",
+      "triggers": [
+        "guardrail",
+        "mpc",
+        "tss",
+        "risco",
+        "drawdown",
+        "circuit-breaker",
+        "slippage"
+      ],
+      "scripts": [
+        "cognition_skills/skills/risk_mpc_guardrail/scripts/verify_risk_and_mpc.py"
+      ],
+      "references": [
+        "cognition_skills/skills/risk_mpc_guardrail/references/guardrail_rules.json"
+      ],
+      "default_state": "dormant"
+    },
+    {
+      "id": "tax-ledger-in1888",
+      "name": "Tax Ledger & IN 1888 Compliance",
+      "path": "cognition_skills/skills/tax_ledger_in1888/SKILL.md",
+      "pillar": "Pilar 8: Ledger Contábil & Compliance Fiscal",
+      "description": "Governança contábil por partidas dobradas, cálculo de preço médio ponderado (PMP), ganho de capital em BRL e geração de eventos da IN 1888/2019 da RFB.",
+      "triggers": [
+        "in1888",
+        "tributario",
+        "fiscal",
+        "ledger",
+        "partidas-dobradas",
+        "ganho-de-capital",
+        "pmp"
+      ],
+      "scripts": [
+        "cognition_skills/skills/tax_ledger_in1888/scripts/calculate_in1888_tax.py"
+      ],
+      "references": [
+        "cognition_skills/skills/tax_ledger_in1888/references/in1888_rules_spec.md"
+      ],
+      "default_state": "dormant"
+    },
+    {
+      "id": "posthog-telemetry",
+      "name": "PostHog Telemetry & Decision Audit",
+      "path": "cognition_skills/skills/posthog_telemetry/SKILL.md",
+      "pillar": "Pilar 4: Console UI & Observabilidade",
+      "description": "Esquema de rastreamento de eventos analíticos, auditoria de decisões de agentes autônomos e monitoramento de funis operacionais no PostHog self-hosted.",
+      "triggers": [
+        "telemetria",
+        "posthog",
+        "observabilidade",
+        "eventos",
+        "auditoria",
+        "metricas"
+      ],
+      "scripts": [
+        "cognition_skills/skills/posthog_telemetry/scripts/emit_posthog_event.py"
+      ],
+      "references": [
+        "cognition_skills/skills/posthog_telemetry/references/telemetry_events_schema.json"
+      ],
+      "default_state": "dormant"
+    }
+  ]
+}

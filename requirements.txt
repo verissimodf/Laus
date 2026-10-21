@@ -1,0 +1,9 @@
+# Dependências do Projeto (Compatível com Antigravity Desktop e Google Colab)
+# SDK Oficial do Google Gemini
+google-genai>=1.0.0
+
+# Gerenciamento de credenciais e variáveis de ambiente locais
+python-dotenv>=1.0.1
+
+# Esquemas estruturados e tipagem de dados
+pydantic>=2.0.0

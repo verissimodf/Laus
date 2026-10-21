@@ -1,0 +1,50 @@
+{
+  "events": [
+    {
+      "event": "laus_skill_invoked",
+      "description": "Emitido quando uma skill operacional do AgentSkills é carregada e executada por um agente.",
+      "properties": {
+        "skill_name": "string (ex: macro-brazil)",
+        "agent_id": "string",
+        "pillar": "integer (1 a 8)",
+        "input_parameters": "object",
+        "execution_duration_ms": "number"
+      }
+    },
+    {
+      "event": "laus_guardrail_blocked",
+      "description": "Emitido quando o RiskGuardrail veta uma tentativa de ordem ou movimentação financeira.",
+      "properties": {
+        "symbol": "string",
+        "attempted_amount_usd": "number",
+        "limit_usd": "number",
+        "reason": "string",
+        "guardrail_code": "string"
+      }
+    },
+    {
+      "event": "laus_order_filled",
+      "description": "Emitido quando uma ordem é executada com sucesso e confirmada pela exchange.",
+      "properties": {
+        "order_id": "string",
+        "symbol": "string",
+        "side": "string (buy/sell)",
+        "executed_price": "number",
+        "executed_amount": "number",
+        "fee_usd": "number",
+        "net_pnl_usd": "number",
+        "environment": "string (shadow/live)"
+      }
+    },
+    {
+      "event": "laus_kill_switch_triggered",
+      "description": "Emitido quando o operador ou o sistema aciona a parada emergencial global.",
+      "properties": {
+        "triggered_by": "string (operator/watchdog/latency_circuit_breaker)",
+        "reason": "string",
+        "open_orders_cancelled": "integer",
+        "timestamp": "number"
+      }
+    }
+  ]
+}
