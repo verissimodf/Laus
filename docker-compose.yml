@@ -1,115 +1,79 @@
-version: '3.9'
-
-networks:
-  laus-mesh:
-    driver: bridge
-
-volumes:
-  redis-data:
-  postgres-data:
-  qdrant-data:
-
 services:
-  # Pilar 1: Barramento de Eventos Assíncrono (Redis Streams)
-  event-bus:
+  # 1. Barramento de Eventos e Mensageria (Core Jarvis)
+  redis:
     image: redis:7-alpine
-    container_name: laus-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes
+    container_name: laus_redis
     ports:
       - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - laus-mesh
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  # Pilar 8: Banco Contábil Relacional (PostgreSQL)
-  postgres:
-    image: postgres:16-alpine
-    container_name: laus-postgres
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-laus_ledger}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
     networks:
-      - laus-mesh
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - laus_network
 
-  # Pilar 5: Memória Episódica & GraphRAG (Qdrant Vector DB)
-  vector-store:
+  # 2. Banco Vetorial para Memória Episódica e GraphRAG (Pilar 5)
+  qdrant:
     image: qdrant/qdrant:latest
-    container_name: laus-qdrant
-    restart: unless-stopped
+    container_name: laus_qdrant
     ports:
       - "6333:6333"
       - "6334:6334"
     volumes:
-      - qdrant-data:/qdrant/storage
-    networks:
-      - laus-mesh
-
-  # Pilar 4: Telemetria & Auditoria Analítica (PostHog Self-Hosted)
-  telemetry:
-    image: posthog/posthog:latest
-    container_name: laus-posthog
+      - qdrant_storage:/qdrant/storage
     restart: unless-stopped
+    networks:
+      - laus_network
+
+  # 3. PostgreSQL com suporte a Ledger e Estado Relacional (Pilar 8)
+  postgres:
+    image: postgres:15-alpine
+    container_name: laus_postgres
+    environment:
+      POSTGRES_USER: laus_user
+      POSTGRES_PASSWORD: laus_secure_password
+      POSTGRES_DB: laus_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - laus_network
+
+  # 4. Motor Quantitativo de Execução e Backtest (Pilar 2 - Freqtrade)
+  laus_freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: laus_freqtrade
+    volumes:
+      - ./agents_quant/freqtrade_engine:/freqtrade/user_data
+    ports:
+      - "8080:8080"
+    command: ["trade", "--config", "/freqtrade/user_data/config.json", "--strategy", "DefaultStrategy"]
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - laus_network
+
+  # 5. Observabilidade, Telemetria e Feature Flags (Pilar 4 - PostHog Local)
+  posthog:
+    image: posthog/posthog:latest
+    container_name: laus_posthog
     ports:
       - "8000:8000"
     environment:
-      - IS_BEHIND_PROXY=false
-    networks:
-      - laus-mesh
-
-  # Pilar 4: Console UI & Dashboard de Observabilidade
-  console_ui:
-    image: python:3.11-slim
-    container_name: laus-console
+      - DATABASE_URL=postgres://laus_user:laus_secure_password@postgres:5432/laus_db
+      - REDIS_URL=redis://redis:6379/0
+      - SITE_URL=http://localhost:8000
     restart: unless-stopped
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python -m uvicorn console_ui.server:app --host 0.0.0.0 --port 8080
-    ports:
-      - "8080:8080"
-    environment:
-      - LAUS_ENVIRONMENT=homologation
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/laus_ledger
-    networks:
-      - laus-mesh
     depends_on:
       - postgres
-
-  # Pilar 1: Orquestrador Cognitivo Jarvis Core
-  core_jarvis:
-    image: python:3.11-slim
-    container_name: laus-jarvis
-    restart: unless-stopped
-    volumes:
-      - .:/app
-    working_dir: /app
-    command: python core_jarvis/orchestrator.py
-    environment:
-      - LAUS_ENVIRONMENT=homologation
-      - REDIS_URL=redis://event-bus:6379/0
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/laus_ledger
-    depends_on:
-      event-bus:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      - redis
     networks:
-      - laus-mesh
+      - laus_network
+
+volumes:
+  qdrant_storage:
+  postgres_data:
+
+networks:
+  laus_network:
+    driver: bridge
