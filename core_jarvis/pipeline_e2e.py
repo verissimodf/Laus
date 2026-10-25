@@ -233,6 +233,7 @@ class LausE2EPipeline:
             rate=fiat_rate,
             spread_pct=effective_spread_pct,
             source=f"PAPER_SIMULATION_{self.environment.upper()}",
+            evidence=proposal.market_evidence,
         )
 
         trade_record = {
@@ -246,6 +247,7 @@ class LausE2EPipeline:
             "environment": self.environment,
             "latency_ms": proposal.latency_ms,
             "swarm_result": proposal.swarm_result,
+            "market_evidence": proposal.market_evidence,
         }
         self.executed_trades.append(trade_record)
 

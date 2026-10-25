@@ -56,6 +56,8 @@ class OrderbookScanner:
                     "bids": [[float(p), float(q)] for p, q in data.get("bids", [])[:15]],
                     "asks": [[float(p), float(q)] for p, q in data.get("asks", [])[:15]],
                     "timestamp": int(time.time()),
+                    "source_timestamp": data.get("timestamp", data.get("time")),
+                    "received_at": time.time(),
                 }
         except Exception:
             pass
@@ -74,6 +76,8 @@ class OrderbookScanner:
                     "bids": [[round(bid * (1.0 - 0.0005 * i), 4), 500.0 + i * 250.0] for i in range(8)],
                     "asks": [[round(ask * (1.0 + 0.0005 * i), 4), 500.0 + i * 250.0] for i in range(8)],
                     "timestamp": int(time.time()),
+                    "source_timestamp": data.get("timestamp", data.get("time")),
+                    "received_at": time.time(),
                 }
         except Exception as e:
             raise RuntimeError(f"Falha em todos os provedores de livro de ofertas: {e}")

@@ -5,7 +5,10 @@
 [![Self-Hosted](https://img.shields.io/badge/Architecture-Self--Hosted-0A0E17?style=for-the-badge&logo=docker&logoColor=00F0FF)](#)
 [![Zero-Trust](https://img.shields.io/badge/Security-Zero--Trust_%2F_MPC-0A0E17?style=for-the-badge&logo=tailscale&logoColor=10B981)](#)
 [![AgentSkills](https://img.shields.io/badge/Standard-AgentSkills_(SKILL.md)-0A0E17?style=for-the-badge&logo=markdown&logoColor=F59E0B)](#)
-[![Compliance](https://img.shields.io/badge/Compliance-IN_1888_%2F_Double--Entry-0A0E17?style=for-the-badge&logo=postgresql&logoColor=3B82F6)](#)
+[![Mode](https://img.shields.io/badge/Mode-Paper_Only-0A0E17?style=for-the-badge&logo=python&logoColor=3B82F6)](#)
+
+> **Estado atual do código:** Laus é experimental e opera somente em modo paper. O pipeline registra estimativas e não envia ordens a corretoras ([pipeline](core_jarvis/pipeline_e2e.py)); o gateway MCP oferece leitura, simulação e validação de propostas, sem liquidação ([servidor MCP](gateway_vault/mcp_servers/official_server.py)). O guardrail ainda não aplica limites de exposição ou perda diária. O ledger SQLite é uma estimativa simplificada, sem partidas dobradas nem conformidade fiscal ([ledger](accounting_ledger/ledger_engine.py)). A telemetria PostHog exige ativação explícita e token de projeto ([emissor](cognition_skills/skills/posthog_telemetry/scripts/emit_posthog_event.py)). As seções abaixo descrevem a arquitetura-alvo e itens em evolução, não capacidades já disponíveis em produção.
+
 
 **Laus** é uma plataforma pessoal, auto-hospedada (*self-hosted*) e orientada a eventos que unifica **orquestração cognitiva estilo Jarvis**, **motores quantitativos de alta frequência e arbitragem**, **simulação multiagente em enxame (Swarm)** e **governança financeira/fiscal rigorosa**.
 
@@ -13,7 +16,7 @@ Projetado para operar 24/7 com soberania total de dados e chaves, o Laus combina
 
 ---
 
-## 🏛️ Os 8 Pilares Fundamentais da Plataforma
+## 🏛️ Arquitetura-alvo: 8 pilares em evolução
 
 A arquitetura do **Laus** é sustentada por 8 dimensões interdependentes que garantem autonomia decisória, resiliência operacional e conformidade contábil:
 

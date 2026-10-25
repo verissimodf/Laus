@@ -9,12 +9,14 @@ Ao identificar janelas favoráveis (spread líquido > theta_min), submete a prop
 """
 
 import asyncio
+import hashlib
+import json
 import logging
 import random
 import sys
 import time
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
@@ -79,6 +81,7 @@ class SpreadOpportunity:
     estimated_slippage_pct: float
     viable_volume_usd: float
     is_actionable: bool
+    market_evidence: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -98,6 +101,7 @@ class ArbitrageProposal:
     swarm_result: Optional[Dict[str, Any]] = None
     net_spread_bps: Optional[float] = None
     estimated_slippage: Optional[float] = None
+    market_evidence: Optional[Dict[str, Any]] = None
 
 
 class AsyncSpreadDetector:
@@ -148,6 +152,12 @@ class AsyncSpreadDetector:
         self._task: Optional[asyncio.Task] = None
         self.detected_history: List[SpreadOpportunity] = []
         self.proposals_history: List[ArbitrageProposal] = []
+        self._last_book_evidence: Optional[Dict[str, Any]] = None
+
+    @staticmethod
+    def _evidence_hash(payload: Dict[str, Any]) -> str:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     async def fetch_fiat_quote_async(self) -> Dict[str, Any]:
         """
@@ -155,7 +165,17 @@ class AsyncSpreadDetector:
         Executada em thread pool isolada para não degradar o loop de eventos.
         """
         try:
-            return await asyncio.to_thread(fetch_usd_brl_quote)
+            quote = await asyncio.to_thread(fetch_usd_brl_quote)
+            quote.setdefault("source", "AwesomeAPI")
+            quote["received_at"] = time.time()
+            quote["content_sha256"] = self._evidence_hash({
+                "source": quote["source"],
+                "pair": quote.get("pair"),
+                "bid": quote.get("bid"),
+                "ask": quote.get("ask"),
+                "source_timestamp": quote.get("timestamp"),
+            })
+            return quote
         except Exception as e:
             logger.warning(f"Erro ao consultar AwesomeAPI; ciclo sem cotação válida: {e}")
             raise RuntimeError("Cotação fiduciária indisponível; proposta não acionável") from e
@@ -175,6 +195,22 @@ class AsyncSpreadDetector:
             book = await asyncio.to_thread(OrderbookScanner.fetch_live_orderbook, "USDT-BRL")
             if book.get("source") != "Mercado Bitcoin (Live Book)":
                 raise RuntimeError(f"Fonte não negociável: {book.get('source', 'desconhecida')}")
+            received_at = book.get("received_at", time.time())
+            self._last_book_evidence = {
+                "source": book.get("source"),
+                "symbol": book.get("symbol"),
+                "source_timestamp": book.get("source_timestamp"),
+                "received_at": received_at,
+                "source_timestamp_present": book.get("source_timestamp") is not None,
+                "freshness_verified": False,
+                "content_sha256": self._evidence_hash({
+                    "source": book.get("source"),
+                    "symbol": book.get("symbol"),
+                    "source_timestamp": book.get("source_timestamp"),
+                    "bids": book.get("bids"),
+                    "asks": book.get("asks"),
+                }),
+            }
             _, vwap_ask, slippage = OrderbookScanner.calculate_vwap_slippage(
                 book["asks"], target_volume_usd
             )
@@ -190,6 +226,7 @@ class AsyncSpreadDetector:
         p_crypto: float,
         slippage_pct: float,
         volume_usd: float = 250.0,
+        market_evidence: Optional[Dict[str, Any]] = None,
     ) -> SpreadOpportunity:
         """Calcula métricas de spread segundo a fórmula do Pilar 2 e @macro_brazil."""
         capital_brl = volume_usd * p_fiat
@@ -218,6 +255,7 @@ class AsyncSpreadDetector:
             estimated_slippage_pct=slippage_pct,
             viable_volume_usd=volume_usd,
             is_actionable=is_actionable,
+            market_evidence=market_evidence or {},
         )
 
     async def stage_mcp_proposal(
@@ -249,6 +287,7 @@ class AsyncSpreadDetector:
                 guardrail_reason=f"Latência de {latency_ms:.1f}ms excede limite de {self.max_latency_ms}ms",
                 net_spread_bps=opportunity.net_spread_bps,
                 estimated_slippage=opportunity.estimated_slippage_pct,
+                market_evidence=opportunity.market_evidence,
             )
 
         # 2. Debate Multiagente MiroFish Swarm (Pilar 2 & 7) antes do Guardrail
@@ -286,6 +325,7 @@ class AsyncSpreadDetector:
                     swarm_result=swarm_result,
                     net_spread_bps=opportunity.net_spread_bps,
                     estimated_slippage=opportunity.estimated_slippage_pct,
+                    market_evidence=opportunity.market_evidence,
                 )
                 self.proposals_history.append(proposal)
                 if self.on_proposal_created:
@@ -322,6 +362,7 @@ class AsyncSpreadDetector:
             swarm_result=swarm_result,
             net_spread_bps=opportunity.net_spread_bps,
             estimated_slippage=opportunity.estimated_slippage_pct,
+            market_evidence=opportunity.market_evidence,
         )
 
         self.proposals_history.append(proposal)
@@ -346,6 +387,17 @@ class AsyncSpreadDetector:
             p_crypto=p_crypto,
             slippage_pct=slippage,
             volume_usd=250.0,
+            market_evidence={
+                "fiat_quote": {
+                    "source": fiat_data.get("source", "unknown"),
+                    "source_timestamp": fiat_data.get("timestamp"),
+                    "received_at": fiat_data.get("received_at"),
+                    "source_timestamp_present": fiat_data.get("timestamp") is not None,
+                    "freshness_verified": False,
+                    "content_sha256": fiat_data.get("content_sha256"),
+                },
+                "orderbook": self._last_book_evidence,
+            },
         )
         self.detected_history.append(opportunity)
 
