@@ -21,7 +21,7 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first, second)
         self.assertEqual(len(first), 64)
 
-    async def test_poll_cycle_records_source_and_does_not_claim_freshness(self):
+    async def test_poll_cycle_records_source_and_freshness_verification(self):
         detector = AsyncSpreadDetector(min_spread_bps=1e9)
 
         async def fake_fiat():
@@ -31,6 +31,7 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
                 "timestamp": "1761390000",
                 "received_at": 1761390001.0,
                 "content_sha256": "a" * 64,
+                "freshness_verified": True,
             }
 
         async def fake_book(fiat_ask, target_volume_usd):
@@ -50,6 +51,7 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
 
         evidence = detector.detected_history[0].market_evidence
         self.assertEqual(evidence["fiat_quote"]["source"], "AwesomeAPI")
+        self.assertTrue(evidence["fiat_quote"]["freshness_verified"])
         self.assertEqual(
             evidence["orderbook"]["source"],
             "Mercado Bitcoin (Live Book)",
