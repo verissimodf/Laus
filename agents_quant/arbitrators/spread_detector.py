@@ -10,6 +10,7 @@ Ao identificar janelas favoráveis (spread líquido > theta_min), submete a prop
 
 import asyncio
 import hashlib
+import json
 import logging
 import random
 import sys
