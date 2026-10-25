@@ -112,6 +112,31 @@ class LausE2EPipeline:
         """
         return await self.execute_pipeline_turn(proposal)
 
+    def _kill_switch_rejection(self, proposal: ArbitrageProposal) -> Optional[Dict[str, Any]]:
+        if not self.orchestrator.emergency_stop:
+            return None
+
+        logger.warning(f"🚨 Pipeline rejeitou proposta {proposal.proposal_id}: Kill Switch ativo!")
+        self.rejected_proposals.append({
+            "proposal_id": proposal.proposal_id,
+            "reason": "KILL_SWITCH_ACTIVE",
+        })
+        capture_laus_event(
+            event_name="laus_order_rejected_kill_switch",
+            distinct_id="pipeline_e2e",
+            properties={
+                "proposal_id": proposal.proposal_id,
+                "symbol": proposal.symbol,
+                "amount_usd": proposal.amount_usd,
+            },
+        )
+        return {
+            "success": False,
+            "status": "ABORTED_BY_KILL_SWITCH",
+            "proposal_id": proposal.proposal_id,
+            "reason": "Emergency stop is active in JarvisOrchestrator",
+        }
+
     async def execute_pipeline_turn(
         self,
         proposal: ArbitrageProposal,
@@ -122,27 +147,9 @@ class LausE2EPipeline:
         Avalia e registra uma simulação paper; não envia nem liquida ordem real.
         """
         # 1. Checagem do Kill Switch Central do Jarvis (Pilar 1)
-        if self.orchestrator.emergency_stop:
-            logger.warning(f"🚨 Pipeline rejeitou proposta {proposal.proposal_id}: Kill Switch ativo!")
-            self.rejected_proposals.append({
-                "proposal_id": proposal.proposal_id,
-                "reason": "KILL_SWITCH_ACTIVE",
-            })
-            capture_laus_event(
-                event_name="laus_order_rejected_kill_switch",
-                distinct_id="pipeline_e2e",
-                properties={
-                    "proposal_id": proposal.proposal_id,
-                    "symbol": proposal.symbol,
-                    "amount_usd": proposal.amount_usd,
-                },
-            )
-            return {
-                "success": False,
-                "status": "ABORTED_BY_KILL_SWITCH",
-                "proposal_id": proposal.proposal_id,
-                "reason": "Emergency stop is active in JarvisOrchestrator",
-            }
+        kill_switch_rejection = self._kill_switch_rejection(proposal)
+        if kill_switch_rejection is not None:
+            return kill_switch_rejection
 
         # 2. Avaliação de Consenso MiroFish Swarm (Pilar 2 & 7) se ativo e ainda não avaliado
         if self.enable_swarm and self.swarm_orchestrator and not proposal.swarm_result:
@@ -268,6 +275,11 @@ class LausE2EPipeline:
                 "daily_paper_pnl_usd": daily_state["paper_realized_pnl_usd"],
                 "daily_paper_notional_usd": daily_state["paper_daily_notional_usd"],
             }
+
+        # Revalida o latch imediatamente antes de gravar o lançamento paper.
+        kill_switch_rejection = self._kill_switch_rejection(proposal)
+        if kill_switch_rejection is not None:
+            return kill_switch_rejection
 
         # 6. Registro de simulação paper (sem envio ou confirmação de ordem)
         # Os valores registrados são estimativas do simulador, não execução nem apuração fiscal
