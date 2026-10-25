@@ -203,7 +203,7 @@ class AsyncSpreadDetector:
                 "source_timestamp": book.get("source_timestamp"),
                 "received_at": received_at,
                 "source_timestamp_present": book.get("source_timestamp") is not None,
-                "freshness_verified": False,
+                "freshness_verified": book.get("freshness_verified") is True,
                 "content_sha256": self._evidence_hash({
                     "source": book.get("source"),
                     "symbol": book.get("symbol"),

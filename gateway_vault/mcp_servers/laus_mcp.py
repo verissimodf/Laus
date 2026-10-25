@@ -165,7 +165,10 @@ class LausMCPServer:
                 "ask_vwap": vwap_ask,
                 "ask_slippage_pct": slip_ask,
                 "spread_bruto_pct": round(((topo_ask - topo_bid) / topo_bid) * 100, 3) if topo_bid > 0 else 0.0,
-                "timestamp": book["timestamp"]
+                "timestamp": book["timestamp"],
+                "source_timestamp": book.get("source_timestamp"),
+                "received_at": book.get("received_at"),
+                "freshness_verified": book.get("freshness_verified", False),
             }
 
         elif tool_name == "mcp_swarm_evaluate":
