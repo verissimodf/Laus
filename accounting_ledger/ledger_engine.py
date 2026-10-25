@@ -75,8 +75,6 @@ class AccountingLedger:
             raise ValueError("amount_usd deve ser positivo")
         if rate <= 0:
             raise ValueError("rate deve ser positivo")
-        if spread_pct < 0:
-            raise ValueError("spread_pct não pode ser negativo")
         if proposal_id is not None:
             if not isinstance(proposal_id, str) or not proposal_id.strip():
                 raise ValueError("proposal_id deve ser uma string não vazia")
