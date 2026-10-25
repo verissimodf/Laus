@@ -7,3 +7,6 @@ python-dotenv>=1.0.1
 
 # Esquemas estruturados e tipagem de dados
 pydantic>=2.0.0
+
+# Official Model Context Protocol Python SDK (v2 stable line)
+mcp>=2,<3
