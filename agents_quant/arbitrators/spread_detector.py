@@ -269,32 +269,6 @@ class AsyncSpreadDetector:
         Nenhuma ordem é autorizada sem validação determinística de risco e latência.
         """
         proposal_id = f"PROP-{uuid.uuid4().hex[:8].upper()}"
-        if not opportunity.is_actionable or opportunity.net_spread_bps < self.min_spread_bps:
-            reason = (
-                f"Spread líquido de {opportunity.net_spread_bps:.2f} bps abaixo do "
-                f"mínimo de {self.min_spread_bps:.2f} bps"
-            )
-            proposal = ArbitrageProposal(
-                proposal_id=proposal_id,
-                timestamp=time.time(),
-                symbol=self.symbol,
-                side="buy",
-                amount_usd=opportunity.viable_volume_usd,
-                target_price=opportunity.p_crypto_vwap,
-                expected_net_profit_usd=opportunity.viable_volume_usd * opportunity.net_spread_pct / 100.0,
-                latency_ms=latency_ms,
-                guardrail_approved=False,
-                status="REJECTED_BELOW_MIN_SPREAD",
-                guardrail_reason=reason,
-                net_spread_bps=opportunity.net_spread_bps,
-                estimated_slippage=opportunity.estimated_slippage_pct,
-                market_evidence=opportunity.market_evidence,
-            )
-            self.proposals_history.append(proposal)
-            if self.on_proposal_created:
-                await self.on_proposal_created(proposal)
-            return proposal
-
         amount_usd = opportunity.viable_volume_usd
         expected_profit = amount_usd * (opportunity.net_spread_pct / 100.0)
 
@@ -373,6 +347,19 @@ class AsyncSpreadDetector:
             approved = False
             status = "REJECTED_GUARDRAIL"
             reason = str(e)
+
+        # Apply the strategy threshold at the staging boundary after safety checks,
+        # so latency and deterministic risk rejections retain their specific status.
+        if approved and (
+            not opportunity.is_actionable
+            or opportunity.net_spread_bps < self.min_spread_bps
+        ):
+            approved = False
+            status = "REJECTED_BELOW_MIN_SPREAD"
+            reason = (
+                f"Spread líquido de {opportunity.net_spread_bps:.2f} bps abaixo do "
+                f"mínimo de {self.min_spread_bps:.2f} bps"
+            )
 
         proposal = ArbitrageProposal(
             proposal_id=proposal_id,
