@@ -82,12 +82,14 @@ class LausE2EPipeline:
         db_path: Optional[str] = None,
         max_order_usd: float = 500.0,
         max_slippage_pct: float = 0.50,
+        max_daily_drawdown_usd: Optional[float] = None,
         environment: str = "shadow_paper_trading",
     ):
         self.orchestrator = orchestrator or JarvisOrchestrator()
         self.guardrail = guardrail or RiskGuardrail(
             max_order_usd=max_order_usd,
             max_slippage_pct=max_slippage_pct,
+            max_daily_drawdown_usd=max_daily_drawdown_usd,
         )
 
         self.enable_swarm = enable_swarm or (swarm_orchestrator is not None)
