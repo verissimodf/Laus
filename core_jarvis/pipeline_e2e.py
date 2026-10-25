@@ -166,8 +166,8 @@ class LausE2EPipeline:
                     "proposal_id": proposal.proposal_id,
                     "reason": reason,
                 }
-        if fiat_rate <= 0 or effective_spread_pct < 0:
-            reason = "fiat_rate deve ser positivo e effective_spread_pct não pode ser negativo"
+        if fiat_rate <= 0:
+            reason = "fiat_rate deve ser positivo"
             self.rejected_proposals.append({
                 "proposal_id": proposal.proposal_id,
                 "reason": reason,
