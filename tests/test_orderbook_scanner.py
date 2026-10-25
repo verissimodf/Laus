@@ -83,6 +83,8 @@ class TestOrderbookScannerValidation(unittest.TestCase):
             book = OrderbookScanner.fetch_live_orderbook("USDT-BRL")
 
         self.assertEqual(book["source"], "Mercado Bitcoin (Live Book)")
+        self.assertTrue(book["freshness_verified"])
+        self.assertIsNotNone(book["source_timestamp"])
         self.assertEqual(
             urlopen.call_args.args[0].full_url,
             "https://api.mercadobitcoin.net/api/v4/USDT-BRL/orderbook",
