@@ -84,6 +84,7 @@ class LausE2EPipeline:
         max_order_usd: Optional[float] = None,
         max_slippage_pct: Optional[float] = None,
         max_daily_drawdown_usd: Optional[float] = None,
+        min_spread_bps: float = 65.0,
         environment: str = "shadow_paper_trading",
     ):
         self.orchestrator = orchestrator or JarvisOrchestrator()
@@ -101,6 +102,14 @@ class LausE2EPipeline:
         
         target_db = db_path or str(project_root / "accounting_ledger" / "laus_vault.db")
         self.ledger = ledger or AccountingLedger(target_db)
+        if (
+            isinstance(min_spread_bps, bool)
+            or not isinstance(min_spread_bps, (int, float))
+            or not math.isfinite(min_spread_bps)
+            or min_spread_bps < 0
+        ):
+            raise ValueError("min_spread_bps deve ser finito e não negativo")
+        self.min_spread_bps = float(min_spread_bps)
         self.environment = environment
         
         self.executed_trades = []
@@ -252,6 +261,51 @@ class LausE2EPipeline:
                 "proposal_id": proposal.proposal_id,
                 "reason": proposal.guardrail_reason,
                 "swarm_result": proposal.swarm_result,
+            }
+
+        spread_bps = proposal.net_spread_bps
+        if (
+            isinstance(spread_bps, bool)
+            or not isinstance(spread_bps, (int, float))
+            or not math.isfinite(spread_bps)
+        ):
+            status = "INVALID_PROPOSAL_SPREAD"
+            reason = "Proposta sem spread líquido numérico e finito"
+        elif spread_bps < self.min_spread_bps:
+            status = "REJECTED_BELOW_MIN_SPREAD"
+            reason = (
+                f"Spread líquido de {spread_bps:.2f} bps abaixo do "
+                f"mínimo de {self.min_spread_bps:.2f} bps"
+            )
+        else:
+            status = None
+            reason = None
+
+        if status is not None:
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": status,
+            })
+            capture_laus_event(
+                event_name="laus_order_vetoed_by_strategy_threshold",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": status,
+                    "guardrail_code": status,
+                    "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                    "minimum_spread_bps": self.min_spread_bps,
+                },
+            )
+            return {
+                "success": False,
+                "status": status,
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                "minimum_spread_bps": self.min_spread_bps,
             }
 
         # 4. Telemetria de Consenso MiroFish Swarm quando aprovado

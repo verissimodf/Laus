@@ -57,6 +57,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             ledger=self.ledger,
             guardrail=self.guardrail,
             db_path=self.db_path,
+            min_spread_bps=10.0,
             environment="automated_test_suite",
         )
 
@@ -167,6 +168,32 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             "incident under review",
         )
 
+    async def test_pipeline_rejects_missing_or_below_minimum_spread(self):
+        for index, spread_bps in enumerate((None, 30.0)):
+            with self.subTest(spread_bps=spread_bps):
+                proposal = ArbitrageProposal(
+                    proposal_id=f"PROP-PIPELINE-SPREAD-{index}",
+                    timestamp=time.time(),
+                    symbol="USDT/BRL",
+                    side="buy",
+                    amount_usd=100.0,
+                    target_price=5.0,
+                    expected_net_profit_usd=1.0,
+                    latency_ms=30.0,
+                    guardrail_approved=True,
+                    status="STAGED_FOR_MCP_EXECUTION",
+                    net_spread_bps=spread_bps,
+                    estimated_slippage=0.1,
+                )
+                result = await self.pipeline.execute_pipeline_turn(proposal)
+                self.assertFalse(result["success"])
+                self.assertEqual(
+                    result["status"],
+                    "INVALID_PROPOSAL_SPREAD" if spread_bps is None else "REJECTED_BELOW_MIN_SPREAD",
+                )
+
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+
     async def test_stage_rejects_opportunity_below_minimum_spread(self):
         dispatched = []
 
@@ -226,6 +253,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         )
 
         proposal = await detector.stage_mcp_proposal(opportunity, latency_ms=42.5)
+        self.pipeline.min_spread_bps = 20.0
 
         self.assertTrue(proposal.guardrail_approved)
         self.assertEqual(proposal.status, "STAGED_FOR_MCP_EXECUTION")
@@ -379,6 +407,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             latency_ms=30.0,
             guardrail_approved=True,
             status="STAGED_FOR_MCP_EXECUTION",
+            net_spread_bps=100.0,
             estimated_slippage=0.1,
         )
 
@@ -812,6 +841,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             latency_ms=30.0,
             guardrail_approved=True,
             status="STAGED_FOR_MCP_EXECUTION",
+            net_spread_bps=100.0,
             estimated_slippage=0.1,
         )
 
@@ -841,6 +871,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             latency_ms=30.0,
             guardrail_approved=True,
             status="STAGED_FOR_MCP_EXECUTION",
+            net_spread_bps=100.0,
             estimated_slippage=0.1,
         )
 
