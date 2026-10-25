@@ -127,6 +127,25 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         restarted = JarvisOrchestrator(kill_switch_path=self.kill_switch_path)
         self.assertFalse(restarted.emergency_stop)
 
+    def test_kill_switch_reset_refuses_stale_cross_process_incident_state(self):
+        self.orchestrator.trigger_kill_switch("original incident")
+        Path(self.kill_switch_path).write_text(
+            json.dumps({"active": True, "reason": "new incident from another process"}),
+            encoding="utf-8",
+        )
+
+        with self.assertRaisesRegex(ValueError, "mudou em outro processo"):
+            self.orchestrator.reset_kill_switch(
+                "RESET KILL SWITCH",
+                "reviewed original incident",
+            )
+
+        self.assertTrue(self.orchestrator.emergency_stop)
+        with open(self.kill_switch_path, encoding="utf-8") as state_file:
+            state = json.load(state_file)
+        self.assertTrue(state["active"])
+        self.assertEqual(state["reason"], "new incident from another process")
+
     def test_kill_switch_reset_persistence_failure_keeps_latch_active(self):
         from unittest.mock import patch
 
