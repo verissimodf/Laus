@@ -19,14 +19,22 @@ class RiskGuardrail:
         max_order_usd: float = 500.0,
         max_slippage_pct: float = 0.5,
         max_daily_drawdown_usd: float | None = None,
+        max_daily_paper_notional_usd: float | None = None,
     ):
         load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
         if max_daily_drawdown_usd is None:
             max_daily_drawdown_usd = float(os.environ.get("MAX_DAILY_DRAWDOWN_USD", "250.0"))
+        if max_daily_paper_notional_usd is None:
+            max_daily_paper_notional_usd = float(
+                os.environ.get("MAX_DAILY_PAPER_NOTIONAL_USD", "2500.0")
+            )
         self.max_order_usd = self._finite_number("max_order_usd", max_order_usd)
         self.max_slippage_pct = self._finite_number("max_slippage_pct", max_slippage_pct)
         self.max_daily_drawdown_usd = self._finite_number(
             "max_daily_drawdown_usd", max_daily_drawdown_usd
+        )
+        self.max_daily_paper_notional_usd = self._finite_number(
+            "max_daily_paper_notional_usd", max_daily_paper_notional_usd
         )
         if self.max_order_usd <= 0:
             raise ValueError("max_order_usd deve ser positivo")
@@ -34,6 +42,8 @@ class RiskGuardrail:
             raise ValueError("max_slippage_pct não pode ser negativo")
         if self.max_daily_drawdown_usd <= 0:
             raise ValueError("max_daily_drawdown_usd deve ser positivo")
+        if self.max_daily_paper_notional_usd <= 0:
+            raise ValueError("max_daily_paper_notional_usd deve ser positivo")
 
     @staticmethod
     def _finite_number(name: str, value: float) -> float:
@@ -49,6 +59,7 @@ class RiskGuardrail:
         amount_usd: float,
         estimated_slippage: float,
         daily_realized_pnl_usd: float | None = None,
+        daily_paper_notional_usd: float | None = None,
     ) -> bool:
         if not isinstance(symbol, str) or not symbol.strip():
             raise RiskGuardrailException("symbol deve ser uma string não vazia")
@@ -68,6 +79,19 @@ class RiskGuardrail:
             raise RiskGuardrailException(
                 f"Slippage estimado de {estimated_slippage}% excede a tolerância de {self.max_slippage_pct}%"
             )
+        if daily_paper_notional_usd is not None:
+            daily_paper_notional_usd = self._finite_number(
+                "daily_paper_notional_usd", daily_paper_notional_usd
+            )
+            if daily_paper_notional_usd < 0:
+                raise RiskGuardrailException("daily_paper_notional_usd não pode ser negativo")
+            projected_daily_notional = daily_paper_notional_usd + amount_usd
+            if projected_daily_notional > self.max_daily_paper_notional_usd:
+                raise RiskGuardrailException(
+                    "Limite diário de volume paper atingido: "
+                    f"volume projetado=${projected_daily_notional} | "
+                    f"limite=${self.max_daily_paper_notional_usd}"
+                )
         if daily_realized_pnl_usd is not None:
             daily_realized_pnl_usd = self._finite_number(
                 "daily_realized_pnl_usd", daily_realized_pnl_usd

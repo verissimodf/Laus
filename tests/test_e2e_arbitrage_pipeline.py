@@ -453,6 +453,46 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["success"])
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+    async def test_daily_paper_notional_limit_blocks_next_trade(self):
+        self.ledger.record_arbitrage_trade(
+            symbol="USDT-BRL",
+            amount_usd=250.0,
+            rate=5.0,
+            spread_pct=0.0,
+            source="PAPER_SIMULATION_TEST",
+        )
+        limited_pipeline = LausE2EPipeline(
+            orchestrator=self.orchestrator,
+            ledger=self.ledger,
+            guardrail=RiskGuardrail(
+                max_order_usd=500.0,
+                max_slippage_pct=0.5,
+                max_daily_paper_notional_usd=300.0,
+            ),
+            db_path=self.db_path,
+            environment="automated_test_suite",
+        )
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-DAILY-NOTIONAL-STOP",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            estimated_slippage=0.1,
+        )
+
+        result = await limited_pipeline.execute_pipeline_turn(proposal)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "DAILY_PAPER_NOTIONAL_LIMIT")
+        self.assertEqual(result["daily_paper_notional_usd"], 250.0)
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 1)
+
     async def test_daily_paper_drawdown_blocks_next_trade(self):
         self.ledger.record_arbitrage_trade(
             symbol="USDT-BRL",
@@ -546,10 +586,35 @@ class TestRiskGuardrailInputValidation(unittest.TestCase):
         import os
         from unittest.mock import patch
 
-        with patch.dict(os.environ, {"MAX_DAILY_DRAWDOWN_USD": "125.5"}):
+        with patch.dict(
+            os.environ,
+            {
+                "MAX_DAILY_DRAWDOWN_USD": "125.5",
+                "MAX_DAILY_PAPER_NOTIONAL_USD": "900.0",
+            },
+        ):
             configured = RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.5)
 
         self.assertEqual(configured.max_daily_drawdown_usd, 125.5)
+        self.assertEqual(configured.max_daily_paper_notional_usd, 900.0)
+
+    def test_daily_notional_limit_allows_cap_and_rejects_overflow(self):
+        self.assertTrue(
+            self.guardrail.validate_order(
+                "USDT/BRL", 100.0, 0.1, daily_paper_notional_usd=2400.0
+            )
+        )
+        with self.assertRaisesRegex(self.exception, "volume paper"):
+            self.guardrail.validate_order(
+                "USDT/BRL", 100.01, 0.1, daily_paper_notional_usd=2400.0
+            )
+
+    def test_rejects_invalid_daily_paper_notional(self):
+        for value in (-1, float("nan"), float("inf")):
+            with self.subTest(value=value), self.assertRaises(self.exception):
+                self.guardrail.validate_order(
+                    "USDT/BRL", 100.0, 0.1, daily_paper_notional_usd=value
+                )
 
     def test_rejects_proposal_after_daily_paper_loss_limit(self):
         with self.assertRaisesRegex(self.exception, "perda diária paper"):

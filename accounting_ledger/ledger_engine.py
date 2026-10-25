@@ -108,15 +108,17 @@ class AccountingLedger:
         day_start = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         cur = self.conn.cursor()
         cur.execute(
-            "SELECT COUNT(*), COALESCE(SUM(net_profit_usd), 0) "
+            "SELECT COUNT(*), COALESCE(SUM(net_profit_usd), 0), "
+            "COALESCE(SUM(amount_usd), 0) "
             "FROM journal_entries WHERE timestamp >= ?",
             (day_start,),
         )
-        trade_count, daily_pnl = cur.fetchone()
+        trade_count, daily_pnl, daily_notional = cur.fetchone()
         return {
             "date_utc": now.date().isoformat(),
             "paper_trade_count": trade_count,
             "paper_realized_pnl_usd": round(daily_pnl, 4),
+            "paper_daily_notional_usd": round(daily_notional, 4),
         }
 
     def get_summary(self) -> Dict[str, Any]:
