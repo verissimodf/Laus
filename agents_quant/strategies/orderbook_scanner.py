@@ -123,6 +123,7 @@ class OrderbookScanner:
                     "timestamp": int(time.time()),
                     "source_timestamp": source_timestamp,
                     "received_at": received_at,
+                    "freshness_verified": True,
                 }
         except Exception:
             pass
@@ -145,6 +146,7 @@ class OrderbookScanner:
                     "timestamp": int(time.time()),
                     "source_timestamp": data.get("timestamp", data.get("time")),
                     "received_at": time.time(),
+                    "freshness_verified": False,
                 }
         except Exception as e:
             raise RuntimeError(f"Falha em todos os provedores de livro de ofertas: {e}")
