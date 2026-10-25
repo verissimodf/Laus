@@ -11,6 +11,7 @@ Verifies end-to-end flow between:
 
 import asyncio
 import os
+import sqlite3
 import sys
 import tempfile
 import time
@@ -125,6 +126,29 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary["total_operacoes"], 1)
         self.assertGreater(summary["lucro_liquido_usd"], 0)
         self.assertGreater(summary["provisao_ir_brl"], 0)
+
+    async def test_duplicate_proposal_is_recorded_only_once(self):
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-IDEMPOTENCY-TEST",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            estimated_slippage=0.1,
+        )
+
+        first = await self.pipeline.execute_pipeline_turn(proposal)
+        second = await self.pipeline.execute_pipeline_turn(proposal)
+
+        self.assertTrue(first["success"])
+        self.assertEqual(second["status"], "DUPLICATE_PROPOSAL")
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 1)
+        self.assertEqual(self.ledger.get_daily_summary()["paper_trade_count"], 1)
 
     async def test_02_guardrail_rejects_excessive_order_amount(self):
         """Cenário 2: Ordem acima do limite máximo ($800 > $500) é barrada pelo RiskGuardrail."""
@@ -541,6 +565,39 @@ class TestRiskGuardrailInputValidation(unittest.TestCase):
             self.guardrail.validate_order("USDT/BRL", 250, -0.1)
         with self.assertRaises(self.exception):
             self.guardrail.validate_order(" ", 250, 0.1)
+
+class TestLedgerProposalIdempotencyMigration(unittest.TestCase):
+    def test_existing_ledger_is_migrated_without_losing_rows(self):
+        temp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        temp_db.close()
+        try:
+            conn = sqlite3.connect(temp_db.name)
+            conn.execute(
+                "CREATE TABLE journal_entries ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp INTEGER, "
+                "symbol TEXT, side TEXT, amount_usd REAL, rate REAL, "
+                "gross_profit_usd REAL, fee_usd REAL, net_profit_usd REAL, "
+                "tax_provision_brl REAL, source TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO journal_entries (timestamp, symbol, side, amount_usd, "
+                "rate, gross_profit_usd, fee_usd, net_profit_usd, tax_provision_brl, source) "
+                "VALUES (1, 'USDT/BRL', 'ARBITRAGE', 100, 5, 1, 0.1, 0.9, 0, 'LEGACY')"
+            )
+            conn.commit()
+            conn.close()
+
+            ledger = AccountingLedger(temp_db.name)
+            columns = {
+                row[1] for row in ledger.conn.execute("PRAGMA table_info(journal_entries)")
+            }
+            self.assertIn("proposal_id", columns)
+            self.assertEqual(ledger.get_summary()["total_operacoes"], 1)
+            ledger.conn.close()
+        finally:
+            if os.path.exists(temp_db.name):
+                os.remove(temp_db.name)
+
 
 if __name__ == "__main__":
     unittest.main()
