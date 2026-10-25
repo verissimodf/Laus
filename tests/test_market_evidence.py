@@ -90,6 +90,7 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
 
         handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         handle.close()
+        ledger = None
         try:
             conn = sqlite3.connect(handle.name)
             conn.execute("""
@@ -117,6 +118,8 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
             self.assertIn("evidence_json", columns)
             self.assertEqual(row, ("legacy", None))
         finally:
+            if ledger is not None:
+                ledger.conn.close()
             os.remove(handle.name)
 
     async def test_ledger_persists_evidence_json(self):
