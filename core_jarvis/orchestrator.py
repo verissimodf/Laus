@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -46,14 +47,44 @@ class JarvisOrchestrator:
             logger.critical("Estado do kill switch ilegível; bloqueando despacho: %s", exc)
             return True, "KILL_SWITCH_STATE_UNREADABLE"
 
-    def _persist_kill_switch(self, reason: str):
+    def _write_kill_switch_state(self, state: Dict[str, Any]):
         self.kill_switch_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self.kill_switch_path.with_suffix(self.kill_switch_path.suffix + ".tmp")
         with temp_path.open("w", encoding="utf-8") as state_file:
-            json.dump({"active": True, "reason": reason}, state_file)
+            json.dump(state, state_file)
             state_file.flush()
             os.fsync(state_file.fileno())
         os.replace(temp_path, self.kill_switch_path)
+
+    def _persist_kill_switch(self, reason: str):
+        self._write_kill_switch_state({"active": True, "reason": reason})
+
+    def _persist_kill_switch_reset(self, reason: str):
+        self._write_kill_switch_state({
+            "active": False,
+            "reason": None,
+            "last_reset": {
+                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                "reason": reason,
+            },
+        })
+
+    def reset_kill_switch(self, confirmation: str, reason: str) -> bool:
+        """Reset only after an explicit local confirmation and a recorded operator reason."""
+        if confirmation != "RESET KILL SWITCH":
+            raise ValueError("Confirmação inválida; digite RESET KILL SWITCH")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("O motivo do reset é obrigatório")
+        if not self.emergency_stop:
+            return False
+
+        reset_reason = reason.strip()
+        # Persist the inactive state first; keep the in-memory latch active on failure.
+        self._persist_kill_switch_reset(reset_reason)
+        self.emergency_stop = False
+        self.emergency_stop_reason = None
+        logger.warning("KILL SWITCH RESETADO pelo operador. Motivo: %s", reset_reason)
+        return True
 
     async def register_agent(self, name: str, agent_instance):
         self.active_agents[name] = agent_instance

@@ -10,6 +10,7 @@ Verifies end-to-end flow between:
 """
 
 import asyncio
+import json
 import os
 import sqlite3
 import sys
@@ -77,6 +78,57 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restarted.emergency_stop_reason, "test emergency")
         result = await restarted.dispatch_event("ARBITRAGE_TRADE_COMPLETED", {})
         self.assertEqual(result["status"], "aborted")
+
+    def test_kill_switch_reset_requires_confirmation_and_persists_reason(self):
+        self.orchestrator.trigger_kill_switch("incident under review")
+
+        with self.assertRaisesRegex(ValueError, "Confirmação inválida"):
+            self.orchestrator.reset_kill_switch("reset", "cause reviewed")
+        with self.assertRaisesRegex(ValueError, "motivo do reset"):
+            self.orchestrator.reset_kill_switch("RESET KILL SWITCH", "  ")
+        self.assertTrue(self.orchestrator.emergency_stop)
+
+        self.assertTrue(
+            self.orchestrator.reset_kill_switch(
+                "RESET KILL SWITCH",
+                "source issue fixed and manual checks completed",
+            )
+        )
+        self.assertFalse(self.orchestrator.emergency_stop)
+        self.assertIsNone(self.orchestrator.emergency_stop_reason)
+
+        with open(self.kill_switch_path, encoding="utf-8") as state_file:
+            state = json.load(state_file)
+        self.assertFalse(state["active"])
+        self.assertEqual(
+            state["last_reset"]["reason"],
+            "source issue fixed and manual checks completed",
+        )
+        self.assertTrue(state["last_reset"]["timestamp_utc"])
+
+        restarted = JarvisOrchestrator(kill_switch_path=self.kill_switch_path)
+        self.assertFalse(restarted.emergency_stop)
+
+    def test_kill_switch_reset_persistence_failure_keeps_latch_active(self):
+        from unittest.mock import patch
+
+        self.orchestrator.trigger_kill_switch("incident under review")
+        with patch.object(
+            self.orchestrator,
+            "_persist_kill_switch_reset",
+            side_effect=OSError("storage unavailable"),
+        ):
+            with self.assertRaises(OSError):
+                self.orchestrator.reset_kill_switch(
+                    "RESET KILL SWITCH",
+                    "attempted reset after review",
+                )
+
+        self.assertTrue(self.orchestrator.emergency_stop)
+        self.assertEqual(
+            self.orchestrator.emergency_stop_reason,
+            "incident under review",
+        )
 
     async def test_01_paper_trade_is_recorded_without_claiming_execution(self):
         """Cenário 1: Proposta viável aprovada pelo Guardrail e registrada no Ledger com provisão IN 1888."""
