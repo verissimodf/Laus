@@ -294,6 +294,30 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
                     )
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+    async def test_pipeline_rejects_non_json_market_evidence_without_ledger_write(self):
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-INVALID-EVIDENCE",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            net_spread_bps=100.0,
+            estimated_slippage=0.1,
+            market_evidence={"invalid": {1, 2, 3}},
+        )
+
+        result = await self.pipeline.execute_pipeline_turn(proposal)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "PAPER_LEDGER_INPUT_REJECTED")
+        self.assertIn("serializável", result["reason"])
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+
     async def test_invalid_paper_accounting_inputs_are_rejected_before_ledger_write(self):
         invalid_cases = [
             (float("nan"), 0.75),
