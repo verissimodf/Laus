@@ -429,6 +429,34 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["success"])
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+    async def test_daily_paper_drawdown_blocks_next_trade(self):
+        self.ledger.record_arbitrage_trade(
+            symbol="USDT-BRL",
+            amount_usd=500.0,
+            rate=5.0,
+            spread_pct=-60.0,
+            source="PAPER_SIMULATION_TEST",
+        )
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-DAILY-LOSS-STOP",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            estimated_slippage=0.1,
+        )
+
+        result = await self.pipeline.execute_pipeline_turn(proposal)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "DAILY_DRAWDOWN_LIMIT")
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 1)
+
     async def test_10_swarm_vetoes_macro_instability_custom_state(self):
         """Cenário 10: Instabilidade bancária ou oscilação cambial severa causa veto imediato pelo MacroMarketMaker."""
         swarm_orch = SwarmOrchestrator(scenario="normal")
@@ -489,6 +517,15 @@ class TestRiskGuardrailInputValidation(unittest.TestCase):
         for amount, slippage in ((float("nan"), 0.1), (250, float("inf"))):
             with self.subTest(amount=amount, slippage=slippage), self.assertRaises(self.exception):
                 self.guardrail.validate_order("USDT/BRL", amount, slippage)
+
+    def test_rejects_proposal_after_daily_paper_loss_limit(self):
+        with self.assertRaisesRegex(self.exception, "perda diária paper"):
+            self.guardrail.validate_order(
+                "USDT/BRL",
+                100.0,
+                0.1,
+                daily_realized_pnl_usd=-250.0,
+            )
 
     def test_rejects_negative_slippage_and_empty_symbol(self):
         with self.assertRaises(self.exception):
