@@ -6,7 +6,6 @@ Monitora o livro de ofertas L2 em tempo real e calcula o preço médio ponderado
 por volume (VWAP) e o slippage projetado para absorção da ordem na fila.
 """
 
-import hashlib
 import json
 import ssl
 import sys
