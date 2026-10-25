@@ -46,7 +46,8 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.temp_db.close()
         self.db_path = self.temp_db.name
 
-        self.orchestrator = JarvisOrchestrator()
+        self.kill_switch_path = self.db_path + ".kill_switch.json"
+        self.orchestrator = JarvisOrchestrator(kill_switch_path=self.kill_switch_path)
         self.ledger = AccountingLedger(self.db_path)
         self.guardrail = RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.50)
         self.pipeline = LausE2EPipeline(
@@ -62,8 +63,19 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         try:
             if os.path.exists(self.db_path):
                 os.remove(self.db_path)
+            if os.path.exists(self.kill_switch_path):
+                os.remove(self.kill_switch_path)
         except Exception:
             pass
+
+    async def test_kill_switch_persists_across_orchestrator_restart(self):
+        self.orchestrator.trigger_kill_switch("test emergency")
+        restarted = JarvisOrchestrator(kill_switch_path=self.kill_switch_path)
+
+        self.assertTrue(restarted.emergency_stop)
+        self.assertEqual(restarted.emergency_stop_reason, "test emergency")
+        result = await restarted.dispatch_event("ARBITRAGE_TRADE_COMPLETED", {})
+        self.assertEqual(result["status"], "aborted")
 
     async def test_01_paper_trade_is_recorded_without_claiming_execution(self):
         """Cenário 1: Proposta viável aprovada pelo Guardrail e registrada no Ledger com provisão IN 1888."""
