@@ -79,6 +79,24 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         result = await restarted.dispatch_event("ARBITRAGE_TRADE_COMPLETED", {})
         self.assertEqual(result["status"], "aborted")
 
+    def test_kill_switch_reads_configured_environment_path(self):
+        from unittest.mock import patch
+
+        configured_path = self.db_path + ".configured-kill-switch.json"
+        Path(configured_path).write_text(
+            json.dumps({"active": True, "reason": "configured path"}),
+            encoding="utf-8",
+        )
+        try:
+            with patch.dict(os.environ, {"LAUS_KILL_SWITCH_PATH": configured_path}):
+                configured = JarvisOrchestrator()
+
+            self.assertEqual(configured.kill_switch_path, Path(configured_path))
+            self.assertTrue(configured.emergency_stop)
+            self.assertEqual(configured.emergency_stop_reason, "configured path")
+        finally:
+            Path(configured_path).unlink(missing_ok=True)
+
     def test_kill_switch_reset_requires_confirmation_and_persists_reason(self):
         self.orchestrator.trigger_kill_switch("incident under review")
 
