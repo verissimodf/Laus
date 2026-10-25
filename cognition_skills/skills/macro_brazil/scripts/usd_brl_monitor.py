@@ -101,6 +101,7 @@ def fetch_usd_brl_quote() -> Dict[str, Any]:
         "low": low,
         "pct_change": pct_change,
         "timestamp": timestamp,
+        "freshness_verified": True,
         "create_date": quote.get("create_date"),
     }
 
