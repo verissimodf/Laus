@@ -10,13 +10,23 @@ class RiskGuardrailException(Exception):
 
 
 class RiskGuardrail:
-    def __init__(self, max_order_usd: float = 500.0, max_slippage_pct: float = 0.5):
+    def __init__(
+        self,
+        max_order_usd: float = 500.0,
+        max_slippage_pct: float = 0.5,
+        max_daily_drawdown_usd: float = 250.0,
+    ):
         self.max_order_usd = self._finite_number("max_order_usd", max_order_usd)
         self.max_slippage_pct = self._finite_number("max_slippage_pct", max_slippage_pct)
+        self.max_daily_drawdown_usd = self._finite_number(
+            "max_daily_drawdown_usd", max_daily_drawdown_usd
+        )
         if self.max_order_usd <= 0:
             raise ValueError("max_order_usd deve ser positivo")
         if self.max_slippage_pct < 0:
             raise ValueError("max_slippage_pct não pode ser negativo")
+        if self.max_daily_drawdown_usd <= 0:
+            raise ValueError("max_daily_drawdown_usd deve ser positivo")
 
     @staticmethod
     def _finite_number(name: str, value: float) -> float:
@@ -26,7 +36,13 @@ class RiskGuardrail:
             raise RiskGuardrailException(f"{name} deve ser finito")
         return float(value)
 
-    def validate_order(self, symbol: str, amount_usd: float, estimated_slippage: float) -> bool:
+    def validate_order(
+        self,
+        symbol: str,
+        amount_usd: float,
+        estimated_slippage: float,
+        daily_realized_pnl_usd: float | None = None,
+    ) -> bool:
         if not isinstance(symbol, str) or not symbol.strip():
             raise RiskGuardrailException("symbol deve ser uma string não vazia")
 
@@ -45,4 +61,13 @@ class RiskGuardrail:
             raise RiskGuardrailException(
                 f"Slippage estimado de {estimated_slippage}% excede a tolerância de {self.max_slippage_pct}%"
             )
+        if daily_realized_pnl_usd is not None:
+            daily_realized_pnl_usd = self._finite_number(
+                "daily_realized_pnl_usd", daily_realized_pnl_usd
+            )
+            if daily_realized_pnl_usd <= -self.max_daily_drawdown_usd:
+                raise RiskGuardrailException(
+                    "Limite de perda diária paper atingido: "
+                    f"PnL=${daily_realized_pnl_usd} | limite=-${self.max_daily_drawdown_usd}"
+                )
         return True
