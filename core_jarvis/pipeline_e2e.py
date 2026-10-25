@@ -263,51 +263,6 @@ class LausE2EPipeline:
                 "swarm_result": proposal.swarm_result,
             }
 
-        spread_bps = proposal.net_spread_bps
-        if (
-            isinstance(spread_bps, bool)
-            or not isinstance(spread_bps, (int, float))
-            or not math.isfinite(spread_bps)
-        ):
-            status = "INVALID_PROPOSAL_SPREAD"
-            reason = "Proposta sem spread líquido numérico e finito"
-        elif spread_bps < self.min_spread_bps:
-            status = "REJECTED_BELOW_MIN_SPREAD"
-            reason = (
-                f"Spread líquido de {spread_bps:.2f} bps abaixo do "
-                f"mínimo de {self.min_spread_bps:.2f} bps"
-            )
-        else:
-            status = None
-            reason = None
-
-        if status is not None:
-            self.rejected_proposals.append({
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-                "status": status,
-            })
-            capture_laus_event(
-                event_name="laus_order_vetoed_by_strategy_threshold",
-                distinct_id="pipeline_e2e",
-                properties={
-                    "proposal_id": proposal.proposal_id,
-                    "symbol": proposal.symbol,
-                    "status": status,
-                    "guardrail_code": status,
-                    "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
-                    "minimum_spread_bps": self.min_spread_bps,
-                },
-            )
-            return {
-                "success": False,
-                "status": status,
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-                "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
-                "minimum_spread_bps": self.min_spread_bps,
-            }
-
         # 4. Telemetria de Consenso MiroFish Swarm quando aprovado
         if proposal.swarm_result and proposal.swarm_result.get("final_decision") == "APPROVED":
             capture_laus_event(
@@ -362,6 +317,56 @@ class LausE2EPipeline:
                 "reason": reason,
                 "daily_paper_pnl_usd": daily_state["paper_realized_pnl_usd"],
                 "daily_paper_notional_usd": daily_state["paper_daily_notional_usd"],
+            }
+
+        # Preserve kill-switch priority after the final risk check, even when spread metadata is invalid.
+        kill_switch_rejection = self._kill_switch_rejection(proposal)
+        if kill_switch_rejection is not None:
+            return kill_switch_rejection
+
+        spread_bps = proposal.net_spread_bps
+        if (
+            isinstance(spread_bps, bool)
+            or not isinstance(spread_bps, (int, float))
+            or not math.isfinite(spread_bps)
+        ):
+            status = "INVALID_PROPOSAL_SPREAD"
+            reason = "Proposta sem spread líquido numérico e finito"
+        elif spread_bps < self.min_spread_bps:
+            status = "REJECTED_BELOW_MIN_SPREAD"
+            reason = (
+                f"Spread líquido de {spread_bps:.2f} bps abaixo do "
+                f"mínimo de {self.min_spread_bps:.2f} bps"
+            )
+        else:
+            status = None
+            reason = None
+
+        if status is not None:
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": status,
+            })
+            capture_laus_event(
+                event_name="laus_order_vetoed_by_strategy_threshold",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": status,
+                    "guardrail_code": status,
+                    "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                    "minimum_spread_bps": self.min_spread_bps,
+                },
+            )
+            return {
+                "success": False,
+                "status": status,
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                "minimum_spread_bps": self.min_spread_bps,
             }
 
         # Revalida o latch imediatamente antes de gravar o lançamento paper.
