@@ -197,6 +197,24 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(summary["lucro_liquido_usd"], 0)
         self.assertGreater(summary["provisao_ir_brl"], 0)
 
+    def test_ledger_rejects_non_finite_accounting_values(self):
+        invalid_values = [
+            {"amount_usd": float("nan"), "rate": 5.0, "spread_pct": 0.5},
+            {"amount_usd": 10.0, "rate": float("inf"), "spread_pct": 0.5},
+            {"amount_usd": 10.0, "rate": 5.0, "spread_pct": float("nan")},
+            {"amount_usd": 10.0, "rate": 0.0, "spread_pct": 0.5},
+            {"amount_usd": 10.0, "rate": 5.0, "spread_pct": -0.1},
+        ]
+        for values in invalid_values:
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    self.ledger.record_arbitrage_trade(
+                        symbol="USDT/BRL",
+                        source="test",
+                        **values,
+                    )
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+
     async def test_invalid_paper_accounting_inputs_are_rejected_before_ledger_write(self):
         invalid_cases = [
             (float("nan"), 0.75),
