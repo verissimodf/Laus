@@ -167,10 +167,44 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             "incident under review",
         )
 
+    async def test_stage_rejects_opportunity_below_minimum_spread(self):
+        dispatched = []
+
+        async def capture_proposal(proposal):
+            dispatched.append(proposal)
+
+        detector = AsyncSpreadDetector(
+            min_spread_bps=65.0,
+            on_proposal_created=capture_proposal,
+        )
+        opportunity = SpreadOpportunity(
+            opportunity_id="OPP-BELOW-STAGING-THRESHOLD",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            p_fiat_ask=5.0,
+            p_crypto_vwap=5.001,
+            gross_spread_pct=0.02,
+            total_costs_pct=0.01,
+            net_spread_pct=0.01,
+            net_spread_bps=1.0,
+            estimated_slippage_pct=0.1,
+            viable_volume_usd=100.0,
+            is_actionable=False,
+        )
+
+        proposal = await detector.stage_mcp_proposal(opportunity, latency_ms=10.0)
+
+        self.assertFalse(proposal.guardrail_approved)
+        self.assertEqual(proposal.status, "REJECTED_BELOW_MIN_SPREAD")
+        self.assertIn("abaixo do mínimo", proposal.guardrail_reason)
+        self.assertEqual(dispatched, [proposal])
+        self.assertEqual(detector.proposals_history, [proposal])
+
     async def test_01_paper_trade_is_recorded_without_claiming_execution(self):
         """Cenário 1: Proposta viável aprovada pelo Guardrail e registrada no Ledger com provisão IN 1888."""
         detector = AsyncSpreadDetector(
             symbol="USDT/BRL",
+            min_spread_bps=20.0,
             max_order_usd=500.0,
             max_slippage_pct=0.50,
             max_latency_ms=500.0,

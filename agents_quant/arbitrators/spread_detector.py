@@ -348,6 +348,19 @@ class AsyncSpreadDetector:
             status = "REJECTED_GUARDRAIL"
             reason = str(e)
 
+        # Apply the strategy threshold at the staging boundary after safety checks,
+        # so latency and deterministic risk rejections retain their specific status.
+        if approved and (
+            not opportunity.is_actionable
+            or opportunity.net_spread_bps < self.min_spread_bps
+        ):
+            approved = False
+            status = "REJECTED_BELOW_MIN_SPREAD"
+            reason = (
+                f"Spread líquido de {opportunity.net_spread_bps:.2f} bps abaixo do "
+                f"mínimo de {self.min_spread_bps:.2f} bps"
+            )
+
         proposal = ArbitrageProposal(
             proposal_id=proposal_id,
             timestamp=time.time(),
