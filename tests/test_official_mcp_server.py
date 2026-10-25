@@ -54,8 +54,12 @@ class TestOfficialMCPServer(unittest.TestCase):
         self.assertEqual(approved["status"], "PROPOSAL_VALIDATED")
         self.assertTrue(approved["guardrail_authorized"])
         self.assertFalse(approved["order_submitted"])
+        self.assertEqual(approved["validation_scope"], "PER_ORDER_LIMITS_ONLY")
+        self.assertFalse(approved["daily_paper_limits_checked"])
         self.assertEqual(rejected["status"], "REJECTED_BY_GUARDRAIL")
         self.assertFalse(rejected["guardrail_authorized"])
+        self.assertEqual(rejected["validation_scope"], "PER_ORDER_LIMITS_ONLY")
+        self.assertFalse(rejected["daily_paper_limits_checked"])
 
 
 if __name__ == "__main__":

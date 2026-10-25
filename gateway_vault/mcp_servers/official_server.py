@@ -49,7 +49,7 @@ def validate_order_proposal(
     amount_usd: float,
     estimated_slippage: float,
 ) -> dict[str, Any]:
-    """Validate proposal limits; this does not stage or submit an exchange order."""
+    """Validate per-order value and slippage only; no daily ledger check or order submission."""
     return backend.handle_call_tool(
         "mcp_stage_order",
         {
