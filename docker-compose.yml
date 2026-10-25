@@ -4,7 +4,7 @@ services:
     image: redis:7-alpine
     container_name: laus_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
     networks:
       - laus_network
@@ -14,8 +14,8 @@ services:
     image: qdrant/qdrant:latest
     container_name: laus_qdrant
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
     restart: unless-stopped
@@ -28,10 +28,10 @@ services:
     container_name: laus_postgres
     environment:
       POSTGRES_USER: laus_user
-      POSTGRES_PASSWORD: laus_secure_password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: laus_db
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -45,7 +45,7 @@ services:
     volumes:
       - ./agents_quant/freqtrade_engine:/freqtrade/user_data
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     command: ["trade", "--config", "/freqtrade/user_data/config.json", "--strategy", "DefaultStrategy"]
     restart: unless-stopped
     depends_on:
@@ -58,9 +58,9 @@ services:
     image: posthog/posthog:latest
     container_name: laus_posthog
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
-      - DATABASE_URL=postgres://laus_user:laus_secure_password@postgres:5432/laus_db
+      - DATABASE_URL=postgres://laus_user:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/laus_db
       - REDIS_URL=redis://redis:6379/0
       - SITE_URL=http://localhost:8000
     restart: unless-stopped
