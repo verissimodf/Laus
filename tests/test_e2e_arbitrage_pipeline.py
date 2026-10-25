@@ -197,6 +197,39 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(summary["lucro_liquido_usd"], 0)
         self.assertGreater(summary["provisao_ir_brl"], 0)
 
+    async def test_invalid_paper_accounting_inputs_are_rejected_before_ledger_write(self):
+        invalid_cases = [
+            (float("nan"), 0.75),
+            (5.024, float("inf")),
+            (0.0, 0.75),
+            (5.024, -0.1),
+        ]
+
+        for index, (fiat_rate, spread_pct) in enumerate(invalid_cases):
+            with self.subTest(fiat_rate=fiat_rate, spread_pct=spread_pct):
+                proposal = ArbitrageProposal(
+                    proposal_id=f"PROP-INVALID-ACCOUNTING-{index}",
+                    timestamp=time.time(),
+                    symbol="USDT/BRL",
+                    side="buy",
+                    amount_usd=100.0,
+                    target_price=5.0,
+                    expected_net_profit_usd=1.0,
+                    latency_ms=30.0,
+                    guardrail_approved=True,
+                    status="STAGED_FOR_MCP_EXECUTION",
+                    estimated_slippage=0.1,
+                )
+                result = await self.pipeline.execute_pipeline_turn(
+                    proposal,
+                    fiat_rate=fiat_rate,
+                    effective_spread_pct=spread_pct,
+                )
+                self.assertFalse(result["success"])
+                self.assertEqual(result["status"], "PAPER_ACCOUNTING_INPUT_REJECTED")
+
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+
     async def test_kill_switch_activated_during_final_validation_blocks_ledger_write(self):
         from unittest.mock import patch
 
