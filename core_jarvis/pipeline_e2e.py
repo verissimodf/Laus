@@ -82,12 +82,14 @@ class LausE2EPipeline:
         db_path: Optional[str] = None,
         max_order_usd: float = 500.0,
         max_slippage_pct: float = 0.50,
+        max_daily_drawdown_usd: Optional[float] = None,
         environment: str = "shadow_paper_trading",
     ):
         self.orchestrator = orchestrator or JarvisOrchestrator()
         self.guardrail = guardrail or RiskGuardrail(
             max_order_usd=max_order_usd,
             max_slippage_pct=max_slippage_pct,
+            max_daily_drawdown_usd=max_daily_drawdown_usd,
         )
 
         self.enable_swarm = enable_swarm or (swarm_orchestrator is not None)
@@ -117,7 +119,7 @@ class LausE2EPipeline:
         effective_spread_pct: float = 0.75,
     ) -> Dict[str, Any]:
         """
-        Executa um ciclo completo de decisão e liquidação para a proposta fornecida.
+        Avalia e registra uma simulação paper; não envia nem liquida ordem real.
         """
         # 1. Checagem do Kill Switch Central do Jarvis (Pilar 1)
         if self.orchestrator.emergency_stop:
@@ -225,7 +227,41 @@ class LausE2EPipeline:
                 },
             )
 
-        # 5. Registro de simulação paper (sem envio ou confirmação de ordem)
+        # 5. Revalidação no momento do registro usando o PnL paper do dia UTC.
+        daily_state = self.ledger.get_daily_summary()
+        try:
+            self.guardrail.validate_order(
+                symbol=proposal.symbol,
+                amount_usd=proposal.amount_usd,
+                estimated_slippage=proposal.estimated_slippage,
+                daily_realized_pnl_usd=daily_state["paper_realized_pnl_usd"],
+            )
+        except RiskGuardrailException as exc:
+            reason = str(exc)
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "DAILY_DRAWDOWN_LIMIT",
+            })
+            capture_laus_event(
+                event_name="laus_order_vetoed_by_guardrail",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": "DAILY_DRAWDOWN_LIMIT",
+                    "guardrail_code": "DAILY_DRAWDOWN_LIMIT",
+                },
+            )
+            return {
+                "success": False,
+                "status": "DAILY_DRAWDOWN_LIMIT",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "daily_paper_pnl_usd": daily_state["paper_realized_pnl_usd"],
+            }
+
+        # 6. Registro de simulação paper (sem envio ou confirmação de ordem)
         # Os valores registrados são estimativas do simulador, não execução nem apuração fiscal
         ledger_entry = self.ledger.record_arbitrage_trade(
             symbol=proposal.symbol,

@@ -5,6 +5,7 @@ Entries may include a JSON evidence envelope. Profit and tax figures are
 simulation estimates; this module does not implement statutory accounting.
 """
 import json
+from datetime import datetime, timezone
 import sqlite3
 import time
 from typing import Any, Dict, Optional
@@ -73,6 +74,23 @@ class AccountingLedger:
             "fee_usd": round(fee, 4),
             "tax_provision_brl": round(tax_brl, 2),
             "evidence": evidence,
+        }
+
+    def get_daily_summary(self) -> Dict[str, Any]:
+        """Return UTC-day paper results; this is not a broker/account balance."""
+        now = datetime.now(timezone.utc)
+        day_start = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT COUNT(*), COALESCE(SUM(net_profit_usd), 0) "
+            "FROM journal_entries WHERE timestamp >= ?",
+            (day_start,),
+        )
+        trade_count, daily_pnl = cur.fetchone()
+        return {
+            "date_utc": now.date().isoformat(),
+            "paper_trade_count": trade_count,
+            "paper_realized_pnl_usd": round(daily_pnl, 4),
         }
 
     def get_summary(self) -> Dict[str, Any]:
