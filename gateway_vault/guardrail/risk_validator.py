@@ -3,6 +3,10 @@ Laus Execution Gateway - Risk Guardrail (Pilar 3)
 Middleware determinístico que bloqueia ordens fora dos limites de segurança.
 """
 import math
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 
 
 class RiskGuardrailException(Exception):
@@ -14,8 +18,11 @@ class RiskGuardrail:
         self,
         max_order_usd: float = 500.0,
         max_slippage_pct: float = 0.5,
-        max_daily_drawdown_usd: float = 250.0,
+        max_daily_drawdown_usd: float | None = None,
     ):
+        load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+        if max_daily_drawdown_usd is None:
+            max_daily_drawdown_usd = float(os.environ.get("MAX_DAILY_DRAWDOWN_USD", "250.0"))
         self.max_order_usd = self._finite_number("max_order_usd", max_order_usd)
         self.max_slippage_pct = self._finite_number("max_slippage_pct", max_slippage_pct)
         self.max_daily_drawdown_usd = self._finite_number(
