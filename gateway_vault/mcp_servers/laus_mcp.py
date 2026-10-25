@@ -107,7 +107,7 @@ class LausMCPServer:
             },
             {
                 "name": "mcp_stage_order",
-                "description": "Valida limites de segurança no Risk Guardrail determinístico antes de ordenar.",
+                "description": "Valida uma proposta no Risk Guardrail; não envia nem executa ordem.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -116,21 +116,6 @@ class LausMCPServer:
                         "estimated_slippage": {"type": "number", "description": "Slippage estimado em %"}
                     },
                     "required": ["symbol", "amount_usd", "estimated_slippage"]
-                }
-            },
-            {
-                "name": "mcp_execute_hedged_trade",
-                "description": "Executa a liquidação contábil com partidas dobradas e provisão de IR.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "symbol": {"type": "string"},
-                        "amount_usd": {"type": "number"},
-                        "rate": {"type": "number"},
-                        "spread_pct": {"type": "number"},
-                        "source": {"type": "string"}
-                    },
-                    "required": ["symbol", "amount_usd", "rate", "spread_pct", "source"]
                 }
             },
             {
@@ -184,11 +169,12 @@ class LausMCPServer:
             try:
                 self.guardrail.validate_order(symbol, amount_usd, slippage)
                 return {
-                    "status": "APPROVED",
+                    "status": "PROPOSAL_VALIDATED",
                     "symbol": symbol,
                     "amount_usd": amount_usd,
                     "slippage_pct": slippage,
-                    "guardrail_authorized": True
+                    "guardrail_authorized": True,
+                    "order_submitted": False
                 }
             except RiskGuardrailException as e:
                 # Registra evento de veto na telemetria PostHog
@@ -205,44 +191,14 @@ class LausMCPServer:
                 return {
                     "status": "REJECTED_BY_GUARDRAIL",
                     "reason": str(e),
-                    "guardrail_authorized": False
+                    "guardrail_authorized": False,
+                    "order_submitted": False
                 }
 
         elif tool_name == "mcp_execute_hedged_trade":
-            symbol = arguments["symbol"]
-            amount_usd = float(arguments["amount_usd"])
-            rate = float(arguments["rate"])
-            spread_pct = float(arguments["spread_pct"])
-            source = arguments["source"]
-            slippage = float(arguments.get("slippage_pct", 0.10))
-
-            # Validação determinística de risco obrigatória antes de registrar
-            self.guardrail.validate_order(symbol, amount_usd, slippage)
-
-            # Assentamento no Livro-Razão de partidas dobradas
-            entry = self.ledger.record_arbitrage_trade(symbol, amount_usd, rate, spread_pct, source)
-
-            # Disparo de telemetria PostHog
-            capture_laus_event(
-                event_name="laus_order_filled",
-                distinct_id="mcp_gateway",
-                properties={
-                    "symbol": symbol,
-                    "side": "buy",
-                    "amount_usd": amount_usd,
-                    "rate_brl": rate,
-                    "net_pnl_usd": entry["net_profit_usd"],
-                    "fee_usd": entry["fee_usd"],
-                    "tax_provision_brl": entry["tax_provision_brl"],
-                    "entry_id": entry["entry_id"],
-                    "environment": "mcp_gateway_vault"
-                }
+            raise RuntimeError(
+                "Execução e liquidação não estão implementadas; use o modo paper."
             )
-
-            return {
-                "status": "SETTLED",
-                "ledger_entry": entry
-            }
 
         elif tool_name == "mcp_bank_verify":
             target = str(arguments["code_or_ispb"]).strip()
