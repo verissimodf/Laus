@@ -246,6 +246,39 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+    async def test_pipeline_refreshes_external_kill_switch_activation(self):
+        Path(self.kill_switch_path).write_text(
+            json.dumps({"active": True, "reason": "activated by another process"}),
+            encoding="utf-8",
+        )
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-EXTERNAL-KILL-SWITCH",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            estimated_slippage=0.1,
+        )
+
+        result = await self.pipeline.execute_pipeline_turn(proposal)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "ABORTED_BY_KILL_SWITCH")
+        self.assertTrue(self.orchestrator.emergency_stop)
+        self.assertEqual(self.orchestrator.emergency_stop_reason, "activated by another process")
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+
+        Path(self.kill_switch_path).write_text(
+            json.dumps({"active": False, "reason": None}),
+            encoding="utf-8",
+        )
+        self.assertTrue(self.orchestrator.refresh_kill_switch())
+
     async def test_kill_switch_activated_during_final_validation_blocks_ledger_write(self):
         from unittest.mock import patch
 

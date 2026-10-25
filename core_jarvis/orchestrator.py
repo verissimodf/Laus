@@ -51,6 +51,14 @@ class JarvisOrchestrator:
             logger.critical("Estado do kill switch ilegível; bloqueando despacho: %s", exc)
             return True, "KILL_SWITCH_STATE_UNREADABLE"
 
+    def refresh_kill_switch(self) -> bool:
+        """Refresh a persisted activation without allowing an external reset to clear the latch."""
+        active, reason = self._load_kill_switch()
+        if active:
+            self.emergency_stop = True
+            self.emergency_stop_reason = reason
+        return self.emergency_stop
+
     def _write_kill_switch_state(self, state: Dict[str, Any]):
         self.kill_switch_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self.kill_switch_path.with_suffix(self.kill_switch_path.suffix + ".tmp")
@@ -95,7 +103,7 @@ class JarvisOrchestrator:
         logger.info("Agente registrado: %s", name)
 
     async def dispatch_event(self, event_type: str, payload: Dict[str, Any]):
-        if self.emergency_stop:
+        if self.refresh_kill_switch():
             logger.warning("DISPATCH BLOQUEADO: Kill switch ativado!")
             return {"status": "aborted", "reason": "emergency_stop"}
 

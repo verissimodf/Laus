@@ -114,7 +114,7 @@ class LausE2EPipeline:
         return await self.execute_pipeline_turn(proposal)
 
     def _kill_switch_rejection(self, proposal: ArbitrageProposal) -> Optional[Dict[str, Any]]:
-        if not self.orchestrator.emergency_stop:
+        if not self.orchestrator.refresh_kill_switch():
             return None
 
         logger.warning(f"🚨 Pipeline rejeitou proposta {proposal.proposal_id}: Kill Switch ativo!")
