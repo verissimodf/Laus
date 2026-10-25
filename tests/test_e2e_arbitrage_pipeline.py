@@ -34,7 +34,7 @@ sys.path.insert(0, str(project_root / "cognition_skills" / "skills" / "posthog_t
 
 from orchestrator import JarvisOrchestrator
 from risk_validator import RiskGuardrail
-from ledger_engine import AccountingLedger
+from ledger_engine import AccountingLedger, DailyPaperNotionalLimitError
 from spread_detector import ArbitrageProposal, AsyncSpreadDetector, SpreadOpportunity
 from pipeline_e2e import LausE2EPipeline
 from swarm_orchestrator import SwarmOrchestrator
@@ -622,6 +622,41 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(pipeline.guardrail.max_order_usd, 125.0)
         self.assertEqual(pipeline.guardrail.max_slippage_pct, 0.2)
+
+    def test_daily_notional_limit_is_atomic_across_ledger_connections(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+
+        barrier = Barrier(2)
+
+        def record_from_separate_connection(index):
+            ledger = AccountingLedger(self.db_path)
+            barrier.wait(timeout=5)
+            try:
+                return ledger.record_arbitrage_trade(
+                    symbol="USDT/BRL",
+                    amount_usd=60.0,
+                    rate=5.0,
+                    spread_pct=0.5,
+                    source="PAPER_SIMULATION_CONCURRENCY_TEST",
+                    proposal_id=f"PROP-CONCURRENT-{index}",
+                    max_daily_notional_usd=100.0,
+                )
+            finally:
+                ledger.conn.close()
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(record_from_separate_connection, i) for i in range(2)]
+            outcomes = []
+            for future in futures:
+                try:
+                    future.result(timeout=10)
+                    outcomes.append("recorded")
+                except DailyPaperNotionalLimitError:
+                    outcomes.append("limit_rejected")
+
+        self.assertCountEqual(outcomes, ["recorded", "limit_rejected"])
+        self.assertEqual(self.ledger.get_daily_summary()["paper_daily_notional_usd"], 60.0)
 
     async def test_daily_paper_notional_limit_blocks_next_trade(self):
         self.ledger.record_arbitrage_trade(
