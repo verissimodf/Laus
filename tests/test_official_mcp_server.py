@@ -47,6 +47,37 @@ class TestOfficialMCPServer(unittest.TestCase):
                 },
             )
 
+    def test_mcp_proposal_validation_rejects_json_booleans_and_strings(self):
+        backend = LausMCPServer(db_path=":memory:")
+
+        for invalid_amount in (True, "100"):
+            with self.subTest(amount=invalid_amount):
+                result = backend.handle_call_tool(
+                    "mcp_stage_order",
+                    {
+                        "symbol": "USDT-BRL",
+                        "amount_usd": invalid_amount,
+                        "estimated_slippage": 0.1,
+                    },
+                )
+                self.assertEqual(result["status"], "REJECTED_BY_GUARDRAIL")
+                self.assertFalse(result["guardrail_authorized"])
+
+    def test_mcp_numeric_tools_reject_non_finite_and_boolean_values(self):
+        backend = LausMCPServer(db_path=":memory:")
+
+        for invalid in (True, float("nan"), float("inf"), "1.0"):
+            with self.subTest(value=invalid), self.assertRaises(ValueError):
+                backend.handle_call_tool(
+                    "mcp_market_scan_depth",
+                    {"symbol": "USDT-BRL", "volume_usd": invalid},
+                )
+            with self.subTest(value=invalid), self.assertRaises(ValueError):
+                backend.handle_call_tool(
+                    "mcp_swarm_evaluate",
+                    {"spread_pct": invalid, "slippage_pct": 0.1},
+                )
+
     def test_proposal_validation_does_not_submit_order(self):
         approved = validate_order_proposal("USDT-BRL", 100.0, 0.1)
         rejected = validate_order_proposal("USDT-BRL", -1.0, 0.1)

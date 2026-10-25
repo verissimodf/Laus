@@ -9,6 +9,7 @@ Nenhuma ordem executa diretamente em corretoras sem validação determinística 
 
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -78,6 +79,12 @@ class LausMCPServer:
         target_db = db_path or str(project_root / "accounting_ledger" / "laus_vault.db")
         self.ledger = ledger or AccountingLedger(target_db)
 
+    @staticmethod
+    def _finite_numeric_argument(value: Any, name: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError(f"{name} deve ser um número JSON finito")
+        return float(value)
+
     def list_tools(self) -> List[Dict[str, Any]]:
         """Retorna o esquema de ferramentas expostas pelo protocolo MCP."""
         return [
@@ -143,7 +150,9 @@ class LausMCPServer:
 
         if tool_name == "mcp_market_scan_depth":
             symbol = arguments.get("symbol", "USDT-BRL")
-            volume_usd = float(arguments["volume_usd"])
+            volume_usd = self._finite_numeric_argument(arguments["volume_usd"], "volume_usd")
+            if volume_usd <= 0:
+                raise ValueError("volume_usd deve ser positivo")
             book = self.scanner.fetch_live_orderbook(symbol)
             topo_bid, vwap_bid, slip_bid = self.scanner.calculate_vwap_slippage(book["bids"], volume_usd)
             topo_ask, vwap_ask, slip_ask = self.scanner.calculate_vwap_slippage(book["asks"], volume_usd)
@@ -160,22 +169,22 @@ class LausMCPServer:
             }
 
         elif tool_name == "mcp_swarm_evaluate":
-            spread_pct = float(arguments["spread_pct"])
-            slippage_pct = float(arguments["slippage_pct"])
+            spread_pct = self._finite_numeric_argument(arguments["spread_pct"], "spread_pct")
+            slippage_pct = self._finite_numeric_argument(arguments["slippage_pct"], "slippage_pct")
             return self.swarm.simulate_consensus(spread_pct, slippage_pct)
 
         elif tool_name == "mcp_stage_order":
             symbol = arguments["symbol"]
-            amount_usd = float(arguments["amount_usd"])
-            slippage = float(arguments["estimated_slippage"])
+            amount_usd = arguments["amount_usd"]
+            slippage = arguments["estimated_slippage"]
 
             try:
                 self.guardrail.validate_order(symbol, amount_usd, slippage)
                 return {
                     "status": "PROPOSAL_VALIDATED",
                     "symbol": symbol,
-                    "amount_usd": amount_usd,
-                    "slippage_pct": slippage,
+                    "amount_usd": float(amount_usd),
+                    "slippage_pct": float(slippage),
                     "validation_scope": "PER_ORDER_LIMITS_ONLY",
                     "daily_paper_limits_checked": False,
                     "guardrail_authorized": True,
