@@ -235,13 +235,19 @@ class LausE2EPipeline:
                 amount_usd=proposal.amount_usd,
                 estimated_slippage=proposal.estimated_slippage,
                 daily_realized_pnl_usd=daily_state["paper_realized_pnl_usd"],
+                daily_paper_notional_usd=daily_state["paper_daily_notional_usd"],
             )
         except RiskGuardrailException as exc:
             reason = str(exc)
+            status = (
+                "DAILY_PAPER_NOTIONAL_LIMIT"
+                if reason.startswith("Limite diário de volume paper")
+                else "DAILY_DRAWDOWN_LIMIT"
+            )
             self.rejected_proposals.append({
                 "proposal_id": proposal.proposal_id,
                 "reason": reason,
-                "status": "DAILY_DRAWDOWN_LIMIT",
+                "status": status,
             })
             capture_laus_event(
                 event_name="laus_order_vetoed_by_guardrail",
@@ -249,16 +255,17 @@ class LausE2EPipeline:
                 properties={
                     "proposal_id": proposal.proposal_id,
                     "symbol": proposal.symbol,
-                    "status": "DAILY_DRAWDOWN_LIMIT",
-                    "guardrail_code": "DAILY_DRAWDOWN_LIMIT",
+                    "status": status,
+                    "guardrail_code": status,
                 },
             )
             return {
                 "success": False,
-                "status": "DAILY_DRAWDOWN_LIMIT",
+                "status": status,
                 "proposal_id": proposal.proposal_id,
                 "reason": reason,
                 "daily_paper_pnl_usd": daily_state["paper_realized_pnl_usd"],
+                "daily_paper_notional_usd": daily_state["paper_daily_notional_usd"],
             }
 
         # 6. Registro de simulação paper (sem envio ou confirmação de ordem)
