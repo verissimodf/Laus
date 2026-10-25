@@ -47,6 +47,42 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(proposal.market_evidence, evidence)
 
+    async def test_existing_ledger_schema_migrates_without_losing_entries(self):
+        import os
+        import sqlite3
+        import tempfile
+
+        handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        handle.close()
+        try:
+            conn = sqlite3.connect(handle.name)
+            conn.execute("""
+                CREATE TABLE journal_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp INTEGER, symbol TEXT, side TEXT, amount_usd REAL,
+                    rate REAL, gross_profit_usd REAL, fee_usd REAL,
+                    net_profit_usd REAL, tax_provision_brl REAL, source TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT INTO journal_entries (timestamp, symbol, source) VALUES (1, 'USDT-BRL', 'legacy')"
+            )
+            conn.commit()
+            conn.close()
+
+            ledger = AccountingLedger(handle.name)
+            columns = {
+                row[1] for row in ledger.conn.execute("PRAGMA table_info(journal_entries)")
+            }
+            row = ledger.conn.execute(
+                "SELECT source, evidence_json FROM journal_entries WHERE id = 1"
+            ).fetchone()
+
+            self.assertIn("evidence_json", columns)
+            self.assertEqual(row, ("legacy", None))
+        finally:
+            os.remove(handle.name)
+
     async def test_ledger_persists_evidence_json(self):
         ledger = AccountingLedger(":memory:")
         evidence = {"orderbook": {"source": "Mercado Bitcoin", "content_sha256": "c" * 64}}
