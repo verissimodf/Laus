@@ -1,0 +1,72 @@
+import json
+import unittest
+
+from agents_quant.arbitrators.spread_detector import AsyncSpreadDetector
+from accounting_ledger.ledger_engine import AccountingLedger
+
+
+class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
+    async def test_evidence_fingerprint_is_stable(self):
+        detector = AsyncSpreadDetector()
+        evidence = {
+            "source": "Mercado Bitcoin (Live Book)",
+            "symbol": "USDT-BRL",
+            "bids": [[5.0, 100.0]],
+            "asks": [[5.01, 100.0]],
+        }
+
+        first = detector._evidence_hash(evidence)
+        second = detector._evidence_hash(dict(reversed(list(evidence.items()))))
+
+        self.assertEqual(first, second)
+        self.assertEqual(len(first), 64)
+
+    async def test_market_evidence_flows_into_proposal(self):
+        evidence = {
+            "fiat_quote": {
+                "source": "AwesomeAPI",
+                "source_timestamp": "1761390000",
+                "content_sha256": "a" * 64,
+            },
+            "orderbook": {
+                "source": "Mercado Bitcoin (Live Book)",
+                "source_timestamp": "1761390001",
+                "content_sha256": "b" * 64,
+            },
+        }
+        detector = AsyncSpreadDetector()
+        opportunity = detector.evaluate_spread(
+            p_fiat=5.0,
+            p_crypto=5.1,
+            slippage_pct=0.1,
+            volume_usd=100.0,
+            market_evidence=evidence,
+        )
+
+        proposal = await detector.stage_mcp_proposal(opportunity, latency_ms=50.0)
+
+        self.assertEqual(proposal.market_evidence, evidence)
+
+    async def test_ledger_persists_evidence_json(self):
+        ledger = AccountingLedger(":memory:")
+        evidence = {"orderbook": {"source": "Mercado Bitcoin", "content_sha256": "c" * 64}}
+
+        entry = ledger.record_arbitrage_trade(
+            symbol="USDT-BRL",
+            amount_usd=100.0,
+            rate=5.0,
+            spread_pct=0.5,
+            source="PAPER_SIMULATION_TEST",
+            evidence=evidence,
+        )
+        row = ledger.conn.execute(
+            "SELECT evidence_json FROM journal_entries WHERE id = ?",
+            (entry["entry_id"],),
+        ).fetchone()
+
+        self.assertEqual(json.loads(row[0]), evidence)
+        self.assertEqual(entry["evidence"], evidence)
+
+
+if __name__ == "__main__":
+    unittest.main()
