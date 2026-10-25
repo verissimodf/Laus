@@ -16,12 +16,16 @@ class RiskGuardrailException(Exception):
 class RiskGuardrail:
     def __init__(
         self,
-        max_order_usd: float = 500.0,
-        max_slippage_pct: float = 0.5,
+        max_order_usd: float | None = None,
+        max_slippage_pct: float | None = None,
         max_daily_drawdown_usd: float | None = None,
         max_daily_paper_notional_usd: float | None = None,
     ):
         load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=False)
+        if max_order_usd is None:
+            max_order_usd = float(os.environ.get("MAX_ORDER_USD", "500.0"))
+        if max_slippage_pct is None:
+            max_slippage_pct = float(os.environ.get("MAX_SLIPPAGE_PCT", "0.5"))
         if max_daily_drawdown_usd is None:
             max_daily_drawdown_usd = float(os.environ.get("MAX_DAILY_DRAWDOWN_USD", "250.0"))
         if max_daily_paper_notional_usd is None:

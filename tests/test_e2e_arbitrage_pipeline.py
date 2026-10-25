@@ -453,6 +453,22 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["success"])
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+    async def test_pipeline_uses_environment_risk_limits_by_default(self):
+        from unittest.mock import patch
+
+        with patch.dict(
+            os.environ,
+            {"MAX_ORDER_USD": "125.0", "MAX_SLIPPAGE_PCT": "0.2"},
+        ):
+            pipeline = LausE2EPipeline(
+                orchestrator=self.orchestrator,
+                ledger=self.ledger,
+                db_path=self.db_path,
+            )
+
+        self.assertEqual(pipeline.guardrail.max_order_usd, 125.0)
+        self.assertEqual(pipeline.guardrail.max_slippage_pct, 0.2)
+
     async def test_daily_paper_notional_limit_blocks_next_trade(self):
         self.ledger.record_arbitrage_trade(
             symbol="USDT-BRL",
@@ -589,12 +605,16 @@ class TestRiskGuardrailInputValidation(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
+                "MAX_ORDER_USD": "400.0",
+                "MAX_SLIPPAGE_PCT": "0.25",
                 "MAX_DAILY_DRAWDOWN_USD": "125.5",
                 "MAX_DAILY_PAPER_NOTIONAL_USD": "900.0",
             },
         ):
-            configured = RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.5)
+            configured = RiskGuardrail()
 
+        self.assertEqual(configured.max_order_usd, 400.0)
+        self.assertEqual(configured.max_slippage_pct, 0.25)
         self.assertEqual(configured.max_daily_drawdown_usd, 125.5)
         self.assertEqual(configured.max_daily_paper_notional_usd, 900.0)
 

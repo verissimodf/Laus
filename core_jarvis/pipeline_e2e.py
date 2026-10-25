@@ -80,8 +80,8 @@ class LausE2EPipeline:
         swarm_orchestrator: Optional[Any] = None,
         enable_swarm: bool = False,
         db_path: Optional[str] = None,
-        max_order_usd: float = 500.0,
-        max_slippage_pct: float = 0.50,
+        max_order_usd: Optional[float] = None,
+        max_slippage_pct: Optional[float] = None,
         max_daily_drawdown_usd: Optional[float] = None,
         environment: str = "shadow_paper_trading",
     ):
@@ -239,11 +239,12 @@ class LausE2EPipeline:
             )
         except RiskGuardrailException as exc:
             reason = str(exc)
-            status = (
-                "DAILY_PAPER_NOTIONAL_LIMIT"
-                if reason.startswith("Limite diário de volume paper")
-                else "DAILY_DRAWDOWN_LIMIT"
-            )
+            if reason.startswith("Limite diário de volume paper"):
+                status = "DAILY_PAPER_NOTIONAL_LIMIT"
+            elif reason.startswith("Limite de perda diária paper"):
+                status = "DAILY_DRAWDOWN_LIMIT"
+            else:
+                status = "RISK_GUARDRAIL_REJECTED"
             self.rejected_proposals.append({
                 "proposal_id": proposal.proposal_id,
                 "reason": reason,
