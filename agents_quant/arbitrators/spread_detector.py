@@ -168,6 +168,7 @@ class AsyncSpreadDetector:
             quote = await asyncio.to_thread(fetch_usd_brl_quote)
             quote.setdefault("source", "AwesomeAPI")
             quote["received_at"] = time.time()
+            quote["freshness_verified"] = quote.get("freshness_verified") is True
             quote["content_sha256"] = self._evidence_hash({
                 "source": quote["source"],
                 "pair": quote.get("pair"),
@@ -393,7 +394,7 @@ class AsyncSpreadDetector:
                     "source_timestamp": fiat_data.get("timestamp"),
                     "received_at": fiat_data.get("received_at"),
                     "source_timestamp_present": fiat_data.get("timestamp") is not None,
-                    "freshness_verified": False,
+                    "freshness_verified": fiat_data.get("freshness_verified", False),
                     "content_sha256": fiat_data.get("content_sha256"),
                 },
                 "orderbook": self._last_book_evidence,
