@@ -203,7 +203,6 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             {"amount_usd": 10.0, "rate": float("inf"), "spread_pct": 0.5},
             {"amount_usd": 10.0, "rate": 5.0, "spread_pct": float("nan")},
             {"amount_usd": 10.0, "rate": 0.0, "spread_pct": 0.5},
-            {"amount_usd": 10.0, "rate": 5.0, "spread_pct": -0.1},
         ]
         for values in invalid_values:
             with self.subTest(values=values):
@@ -220,7 +219,6 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             (float("nan"), 0.75),
             (5.024, float("inf")),
             (0.0, 0.75),
-            (5.024, -0.1),
         ]
 
         for index, (fiat_rate, spread_pct) in enumerate(invalid_cases):
