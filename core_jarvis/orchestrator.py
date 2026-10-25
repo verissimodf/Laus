@@ -3,9 +3,11 @@ Laus Core - Jarvis Orchestrator (Pilar 1)
 Central de eventos assíncronos, roteamento de intenções e despacho de agentes.
 """
 import asyncio
+from contextlib import contextmanager
 import json
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -59,6 +61,40 @@ class JarvisOrchestrator:
             self.emergency_stop_reason = reason
         return self.emergency_stop
 
+    @contextmanager
+    def _kill_switch_write_lock(self):
+        """Serialize kill-switch file updates across processes on Windows and POSIX."""
+        self.kill_switch_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = self.kill_switch_path.with_suffix(self.kill_switch_path.suffix + ".lock")
+        with lock_path.open("a+b") as lock_file:
+            if os.name == "nt":
+                import msvcrt
+
+                lock_file.seek(0, os.SEEK_END)
+                if lock_file.tell() == 0:
+                    lock_file.write(b"\\0")
+                    lock_file.flush()
+                while True:
+                    try:
+                        lock_file.seek(0)
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+                        break
+                    except OSError:
+                        time.sleep(0.05)
+                try:
+                    yield
+                finally:
+                    lock_file.seek(0)
+                    msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
     def _write_kill_switch_state(self, state: Dict[str, Any]):
         self.kill_switch_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = self.kill_switch_path.with_suffix(self.kill_switch_path.suffix + ".tmp")
@@ -69,17 +105,28 @@ class JarvisOrchestrator:
         os.replace(temp_path, self.kill_switch_path)
 
     def _persist_kill_switch(self, reason: str):
-        self._write_kill_switch_state({"active": True, "reason": reason})
+        with self._kill_switch_write_lock():
+            self._write_kill_switch_state({"active": True, "reason": reason})
 
-    def _persist_kill_switch_reset(self, reason: str):
-        self._write_kill_switch_state({
-            "active": False,
-            "reason": None,
-            "last_reset": {
-                "timestamp_utc": datetime.now(timezone.utc).isoformat(),
-                "reason": reason,
-            },
-        })
+    def _persist_kill_switch_reset(
+        self,
+        reason: str,
+        expected_activation_reason: Optional[str] = None,
+    ):
+        with self._kill_switch_write_lock():
+            persisted_active, persisted_reason = self._load_kill_switch()
+            if persisted_active and persisted_reason != expected_activation_reason:
+                raise ValueError(
+                    "Estado do kill switch mudou em outro processo; revise o novo incidente antes do reset"
+                )
+            self._write_kill_switch_state({
+                "active": False,
+                "reason": None,
+                "last_reset": {
+                    "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+                    "reason": reason,
+                },
+            })
 
     def reset_kill_switch(self, confirmation: str, reason: str) -> bool:
         """Reset only after an explicit local confirmation and a recorded operator reason."""
@@ -92,7 +139,10 @@ class JarvisOrchestrator:
 
         reset_reason = reason.strip()
         # Persist the inactive state first; keep the in-memory latch active on failure.
-        self._persist_kill_switch_reset(reset_reason)
+        self._persist_kill_switch_reset(
+            reset_reason,
+            expected_activation_reason=self.emergency_stop_reason,
+        )
         self.emergency_stop = False
         self.emergency_stop_reason = None
         logger.warning("KILL SWITCH RESETADO pelo operador. Motivo: %s", reset_reason)
