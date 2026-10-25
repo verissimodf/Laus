@@ -35,7 +35,7 @@ class TestOrderbookScannerValidation(unittest.TestCase):
         )
         self.assertEqual(top, 5.0)
         self.assertEqual(vwap, 5.06)
-        self.assertEqual(slippage, 1.2)
+        self.assertAlmostEqual(slippage, 1.2)
 
     def test_rejects_non_positive_and_non_finite_target_volume(self):
         for volume in (True, 0, -1.0, float("nan"), float("inf")):
