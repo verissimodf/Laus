@@ -57,7 +57,6 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             ledger=self.ledger,
             guardrail=self.guardrail,
             db_path=self.db_path,
-            min_spread_bps=10.0,
             environment="automated_test_suite",
         )
 
@@ -544,6 +543,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
 
     async def test_06_live_callback_dispatch_integration(self):
         """Cenário 6: Conexão direta do callback do AsyncSpreadDetector ao pipeline E2E."""
+        self.pipeline.min_spread_bps = 10.0
         captured_results = []
 
         async def pipeline_callback(proposal: ArbitrageProposal):
