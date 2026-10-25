@@ -7,6 +7,7 @@ por volume (VWAP) e o slippage projetado para absorção da ordem na fila.
 """
 
 import json
+import math
 import ssl
 import sys
 import time
@@ -29,6 +30,40 @@ class OrderbookScanner:
         "Accept": "application/json",
     }
 
+    @staticmethod
+    def _validate_symbol(symbol: str) -> str:
+        if not isinstance(symbol, str) or not symbol or symbol != symbol.strip():
+            raise ValueError("symbol deve ser um par de mercado válido")
+        parts = symbol.split("-")
+        if (
+            len(parts) != 2
+            or any(not part or not part.isascii() or not part.isalnum() for part in parts)
+        ):
+            raise ValueError("symbol deve usar o formato BASE-QUOTE")
+        return symbol.upper()
+
+    @staticmethod
+    def _parse_levels(levels: Any, side: str) -> List[List[float]]:
+        if not isinstance(levels, list) or not levels:
+            raise ValueError(f"Livro {side} inválido ou vazio")
+        parsed = []
+        for level in levels:
+            if not isinstance(level, (list, tuple)) or len(level) != 2:
+                raise ValueError(f"Nível do livro {side} inválido")
+            try:
+                price, quantity = float(level[0]), float(level[1])
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError(f"Nível do livro {side} não numérico") from exc
+            if (
+                not math.isfinite(price)
+                or not math.isfinite(quantity)
+                or price <= 0
+                or quantity <= 0
+            ):
+                raise ValueError(f"Preço e quantidade do livro {side} devem ser positivos e finitos")
+            parsed.append([price, quantity])
+        return parsed
+
     @classmethod
     def fetch_live_orderbook(cls, symbol: str = "USDT-BRL", timeout: int = 4) -> Dict[str, Any]:
         """
@@ -42,19 +77,24 @@ class OrderbookScanner:
         Returns:
             Dict com 'source', 'bids' [[price, qty]], 'asks' [[price, qty]] e 'timestamp'.
         """
+        symbol = cls._validate_symbol(symbol)
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError("timeout deve ser positivo e finito")
         ctx = ssl.create_default_context()
 
         # Tentativa 1: Mercado Bitcoin (Par nativo BRL)
         try:
-            url = f"https://api.mercadobitcoin.net/api/v4/orderbook?symbol={symbol}"
+            from urllib.parse import urlencode
+
+            url = "https://api.mercadobitcoin.net/api/v4/orderbook?" + urlencode({"symbol": symbol})
             req = urllib.request.Request(url, headers=cls.HEADERS)
             with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return {
                     "source": "Mercado Bitcoin (Live Book)",
                     "symbol": symbol,
-                    "bids": [[float(p), float(q)] for p, q in data.get("bids", [])[:15]],
-                    "asks": [[float(p), float(q)] for p, q in data.get("asks", [])[:15]],
+                    "bids": cls._parse_levels(data.get("bids"), "bids")[:15],
+                    "asks": cls._parse_levels(data.get("asks"), "asks")[:15],
                     "timestamp": int(time.time()),
                     "source_timestamp": data.get("timestamp", data.get("time")),
                     "received_at": time.time(),
@@ -70,6 +110,8 @@ class OrderbookScanner:
                 data = json.loads(resp.read().decode("utf-8"))["USDBRL"]
                 bid = float(data["bid"])
                 ask = float(data["ask"])
+                if not math.isfinite(bid) or not math.isfinite(ask) or bid <= 0 or ask <= 0:
+                    raise ValueError("Cotação fallback deve ser positiva e finita")
                 return {
                     "source": "AwesomeAPI (Synthetic L2 Book Fallback)",
                     "symbol": symbol,
@@ -99,15 +141,21 @@ class OrderbookScanner:
         Returns:
             Tuple[preco_topo, preco_medio_vwap, slippage_pct]
         """
-        if not book_side:
-            raise ValueError("Livro de ofertas vazio. Impossível calcular VWAP.")
+        if (
+            isinstance(target_amount_usd, bool)
+            or not isinstance(target_amount_usd, (int, float))
+            or not math.isfinite(target_amount_usd)
+            or target_amount_usd <= 0
+        ):
+            raise ValueError("target_amount_usd deve ser positivo e finito")
+        validated_side = cls._parse_levels(book_side, "book_side")
 
-        preco_topo = book_side[0][0]
-        restante_usd = target_amount_usd
+        preco_topo = validated_side[0][0]
+        restante_usd = float(target_amount_usd)
         custo_total_brl = 0.0
         volume_total_executado = 0.0
 
-        for preco, qty in book_side:
+        for preco, qty in validated_side:
             volume_nivel_usd = qty  # Para USDT, 1 token ~ 1 USD
             consumir = min(restante_usd, volume_nivel_usd)
             custo_total_brl += consumir * preco
