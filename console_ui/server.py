@@ -134,7 +134,7 @@ def render_dashboard():
                 <div class="col-md-4">
                     <div class="card p-4">
                         <h3>💰 PnL estimado (paper)</h3>
-                        <p class="fs-2 text-success">\${metrics['pnl_usd']:+.4f} USD</p>
+                        <p class="fs-2 text-success">${metrics['pnl_usd']:+.4f} USD</p>
                     </div>
                 </div>
                 <div class="col-md-4">
