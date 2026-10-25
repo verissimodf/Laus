@@ -225,7 +225,41 @@ class LausE2EPipeline:
                 },
             )
 
-        # 5. Registro de simulação paper (sem envio ou confirmação de ordem)
+        # 5. Revalidação no momento do registro usando o PnL paper do dia UTC.
+        daily_state = self.ledger.get_daily_summary()
+        try:
+            self.guardrail.validate_order(
+                symbol=proposal.symbol,
+                amount_usd=proposal.amount_usd,
+                estimated_slippage=proposal.estimated_slippage,
+                daily_realized_pnl_usd=daily_state["paper_realized_pnl_usd"],
+            )
+        except RiskGuardrailException as exc:
+            reason = str(exc)
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "DAILY_DRAWDOWN_LIMIT",
+            })
+            capture_laus_event(
+                event_name="laus_order_vetoed_by_guardrail",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": "DAILY_DRAWDOWN_LIMIT",
+                    "guardrail_code": "DAILY_DRAWDOWN_LIMIT",
+                },
+            )
+            return {
+                "success": False,
+                "status": "DAILY_DRAWDOWN_LIMIT",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "daily_paper_pnl_usd": daily_state["paper_realized_pnl_usd"],
+            }
+
+        # 6. Registro de simulação paper (sem envio ou confirmação de ordem)
         # Os valores registrados são estimativas do simulador, não execução nem apuração fiscal
         ledger_entry = self.ledger.record_arbitrage_trade(
             symbol=proposal.symbol,
