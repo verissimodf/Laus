@@ -64,6 +64,30 @@ class OrderbookScanner:
             parsed.append([price, quantity])
         return parsed
 
+    @staticmethod
+    def _validate_source_timestamp(
+        value: Any,
+        now: Optional[float] = None,
+        max_age_seconds: float = 10.0,
+    ) -> float:
+        if isinstance(value, bool):
+            raise ValueError("Timestamp do livro ausente ou inválido")
+        try:
+            timestamp = float(value)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError("Timestamp do livro ausente ou inválido") from exc
+        if not math.isfinite(timestamp):
+            raise ValueError("Timestamp do livro deve ser finito")
+        if timestamp > 1e14:
+            timestamp /= 1e6
+        elif timestamp > 1e11:
+            timestamp /= 1e3
+        current_time = time.time() if now is None else now
+        age_seconds = current_time - timestamp
+        if age_seconds < -2.0 or age_seconds > max_age_seconds:
+            raise ValueError(f"Timestamp do livro fora da janela de frescor ({age_seconds:.3f}s)")
+        return timestamp
+
     @classmethod
     def fetch_live_orderbook(cls, symbol: str = "USDT-BRL", timeout: int = 4) -> Dict[str, Any]:
         """
@@ -84,20 +108,21 @@ class OrderbookScanner:
 
         # Tentativa 1: Mercado Bitcoin (Par nativo BRL)
         try:
-            from urllib.parse import urlencode
-
-            url = "https://api.mercadobitcoin.net/api/v4/orderbook?" + urlencode({"symbol": symbol})
+            url = f"https://api.mercadobitcoin.net/api/v4/{symbol}/orderbook"
             req = urllib.request.Request(url, headers=cls.HEADERS)
             with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+                source_timestamp = data.get("timestamp", data.get("time"))
+                cls._validate_source_timestamp(source_timestamp)
+                received_at = time.time()
                 return {
                     "source": "Mercado Bitcoin (Live Book)",
                     "symbol": symbol,
                     "bids": cls._parse_levels(data.get("bids"), "bids")[:15],
                     "asks": cls._parse_levels(data.get("asks"), "asks")[:15],
                     "timestamp": int(time.time()),
-                    "source_timestamp": data.get("timestamp", data.get("time")),
-                    "received_at": time.time(),
+                    "source_timestamp": source_timestamp,
+                    "received_at": received_at,
                 }
         except Exception:
             pass
