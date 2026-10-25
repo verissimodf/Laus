@@ -5,6 +5,7 @@ Entries may include a JSON evidence envelope. Profit and tax figures are
 simulation estimates; this module does not implement statutory accounting.
 """
 import json
+import math
 from datetime import datetime, timezone
 import sqlite3
 import time
@@ -63,6 +64,17 @@ class AccountingLedger:
         proposal_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Record a paper estimate once per proposal ID and its source evidence."""
+        for name, value in (
+            ("amount_usd", amount_usd),
+            ("rate", rate),
+            ("spread_pct", spread_pct),
+        ):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                raise ValueError(f"{name} deve ser um número finito")
+        if amount_usd <= 0:
+            raise ValueError("amount_usd deve ser positivo")
+        if rate <= 0:
+            raise ValueError("rate deve ser positivo")
         if proposal_id is not None:
             if not isinstance(proposal_id, str) or not proposal_id.strip():
                 raise ValueError("proposal_id deve ser uma string não vazia")
@@ -71,7 +83,7 @@ class AccountingLedger:
         fee = amount_usd * 0.001
         net = gross_profit - fee
         tax_brl = (net * rate) * 0.15 if net > 0 else 0.0
-        evidence_json = json.dumps(evidence, sort_keys=True) if evidence is not None else None
+        evidence_json = json.dumps(evidence, sort_keys=True, allow_nan=False) if evidence is not None else None
         try:
             with self.conn:
                 cur = self.conn.execute(
