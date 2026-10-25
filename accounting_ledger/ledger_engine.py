@@ -104,7 +104,14 @@ class AccountingLedger:
         fee = amount_usd * 0.001
         net = gross_profit - fee
         tax_brl = (net * rate) * 0.15 if net > 0 else 0.0
-        evidence_json = json.dumps(evidence, sort_keys=True, allow_nan=False) if evidence is not None else None
+        try:
+            evidence_json = (
+                json.dumps(evidence, sort_keys=True, allow_nan=False)
+                if evidence is not None
+                else None
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("evidence deve ser serializável em JSON estrito") from exc
         timestamp = int(time.time())
         try:
             with self.conn:
