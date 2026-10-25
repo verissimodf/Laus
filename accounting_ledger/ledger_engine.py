@@ -20,6 +20,10 @@ class DailyPaperNotionalLimitError(ValueError):
     """Raised when an atomic paper-ledger write would exceed the UTC daily notional cap."""
 
 
+class DailyPaperDrawdownLimitError(ValueError):
+    """Raised when the UTC daily paper drawdown has already reached its configured cap."""
+
+
 class AccountingLedger:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
@@ -67,6 +71,7 @@ class AccountingLedger:
         evidence: Optional[Dict[str, Any]] = None,
         proposal_id: Optional[str] = None,
         max_daily_notional_usd: Optional[float] = None,
+        max_daily_drawdown_usd: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Record a paper estimate once per proposal ID and its source evidence."""
         for name, value in (
@@ -80,14 +85,17 @@ class AccountingLedger:
             raise ValueError("amount_usd deve ser positivo")
         if rate <= 0:
             raise ValueError("rate deve ser positivo")
-        if max_daily_notional_usd is not None:
-            if (
-                isinstance(max_daily_notional_usd, bool)
-                or not isinstance(max_daily_notional_usd, (int, float))
-                or not math.isfinite(max_daily_notional_usd)
-                or max_daily_notional_usd <= 0
+        for name, value in (
+            ("max_daily_notional_usd", max_daily_notional_usd),
+            ("max_daily_drawdown_usd", max_daily_drawdown_usd),
+        ):
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value <= 0
             ):
-                raise ValueError("max_daily_notional_usd deve ser positivo e finito")
+                raise ValueError(f"{name} deve ser positivo e finito")
         if proposal_id is not None:
             if not isinstance(proposal_id, str) or not proposal_id.strip():
                 raise ValueError("proposal_id deve ser uma string não vazia")
@@ -100,24 +108,32 @@ class AccountingLedger:
         timestamp = int(time.time())
         try:
             with self.conn:
-                if max_daily_notional_usd is not None:
-                    # Lock the SQLite writer before reading the cap and keep the read + insert atomic.
+                if max_daily_notional_usd is not None or max_daily_drawdown_usd is not None:
+                    # Lock the SQLite writer before reading limits and keep the read + insert atomic.
                     self.conn.execute("BEGIN IMMEDIATE")
                     now_utc = datetime.fromtimestamp(timestamp, timezone.utc)
                     day_start = int(
                         now_utc.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
                     )
-                    current_notional = self.conn.execute(
-                        "SELECT COALESCE(SUM(amount_usd), 0) FROM journal_entries "
+                    daily_row = self.conn.execute(
+                        "SELECT COALESCE(SUM(amount_usd), 0), "
+                        "COALESCE(SUM(net_profit_usd), 0) FROM journal_entries "
                         "WHERE timestamp >= ?",
                         (day_start,),
-                    ).fetchone()[0]
-                    projected_notional = current_notional + amount_usd
-                    if projected_notional > max_daily_notional_usd:
-                        raise DailyPaperNotionalLimitError(
-                            "Limite diário de volume paper atingido: "
-                            f"volume projetado={projected_notional} USD | "
-                            f"limite={max_daily_notional_usd} USD"
+                    ).fetchone()
+                    current_notional, daily_pnl = daily_row
+                    if max_daily_notional_usd is not None:
+                        projected_notional = current_notional + amount_usd
+                        if projected_notional > max_daily_notional_usd:
+                            raise DailyPaperNotionalLimitError(
+                                "Limite diário de volume paper atingido: "
+                                f"volume projetado={projected_notional} USD | "
+                                f"limite={max_daily_notional_usd} USD"
+                            )
+                    if max_daily_drawdown_usd is not None and daily_pnl <= -max_daily_drawdown_usd:
+                        raise DailyPaperDrawdownLimitError(
+                            "Limite de perda diária paper atingido: "
+                            f"PnL={daily_pnl} USD | limite=-{max_daily_drawdown_usd} USD"
                         )
                 cur = self.conn.execute(
                     """
