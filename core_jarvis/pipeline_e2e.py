@@ -225,14 +225,14 @@ class LausE2EPipeline:
                 },
             )
 
-        # 5. Execução Determinística & Registro Contábil (Pilar 8)
-        # O registro contábil aplica provisão de IR (IN 1888) e taxas de corretagem
+        # 5. Registro de simulação paper (sem envio ou confirmação de ordem)
+        # Os valores registrados são estimativas do simulador, não execução nem apuração fiscal
         ledger_entry = self.ledger.record_arbitrage_trade(
             symbol=proposal.symbol,
             amount_usd=proposal.amount_usd,
             rate=fiat_rate,
             spread_pct=effective_spread_pct,
-            source=f"E2E_ARBITRAGE_{self.environment.upper()}",
+            source=f"PAPER_SIMULATION_{self.environment.upper()}",
         )
 
         trade_record = {
@@ -252,7 +252,7 @@ class LausE2EPipeline:
         # 6. Telemetria PostHog Self-Hosted (Pilar 4)
         has_swarm_consensus = bool(proposal.swarm_result and proposal.swarm_result.get("final_decision") == "APPROVED")
         capture_laus_event(
-            event_name="laus_order_filled",
+            event_name="laus_paper_trade_recorded",
             distinct_id="agent_quant_arbitrator",
             properties={
                 "proposal_id": proposal.proposal_id,
@@ -271,7 +271,7 @@ class LausE2EPipeline:
 
         # 7. Notificação de Despacho no Orquestrador
         await self.orchestrator.dispatch_event(
-            event_type="ARBITRAGE_TRADE_COMPLETED",
+            event_type="PAPER_TRADE_RECORDED",
             payload={
                 "proposal_id": proposal.proposal_id,
                 "ledger_entry_id": ledger_entry["entry_id"],
@@ -281,14 +281,14 @@ class LausE2EPipeline:
         )
 
         logger.info(
-            f"✅ [E2E PIPELINE SUCESSO] Ordem {proposal.proposal_id} registrada no Ledger #{ledger_entry['entry_id']}: "
+            f"🧪 [PAPER PIPELINE] Proposta {proposal.proposal_id} registrada no Ledger #{ledger_entry['entry_id']}: "
             f"Net PnL=${ledger_entry['net_profit_usd']:.4f} USD | IR=R${ledger_entry['tax_provision_brl']:.2f}"
             + (f" | MiroFish Swarm: {proposal.swarm_result.get('votes_summary')}" if proposal.swarm_result else "")
         )
 
         return {
             "success": True,
-            "status": "EXECUTED_AND_RECORDED",
+            "status": "PAPER_TRADE_RECORDED",
             "proposal_id": proposal.proposal_id,
             "ledger_result": ledger_entry,
             "swarm_result": proposal.swarm_result,

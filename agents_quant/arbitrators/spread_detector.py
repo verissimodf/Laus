@@ -157,14 +157,8 @@ class AsyncSpreadDetector:
         try:
             return await asyncio.to_thread(fetch_usd_brl_quote)
         except Exception as e:
-            logger.warning(f"Erro ao consultar AwesomeAPI: {e}. Usando fallback sintético.")
-            return {
-                "pair": "USD-BRL",
-                "bid": 5.0230,
-                "ask": 5.0240,
-                "pct_change": 0.0,
-                "timestamp": int(time.time()),
-            }
+            logger.warning(f"Erro ao consultar AwesomeAPI; ciclo sem cotação válida: {e}")
+            raise RuntimeError("Cotação fiduciária indisponível; proposta não acionável") from e
 
     async def fetch_crypto_book_depth_async(
         self,
@@ -177,21 +171,18 @@ class AsyncSpreadDetector:
         """
         start_time = time.time()
         try:
-            # Consulta livro L2 real do Mercado Bitcoin ou fallback sintético em thread separada
+            # Apenas livro real de corretora pode alimentar uma proposta.
             book = await asyncio.to_thread(OrderbookScanner.fetch_live_orderbook, "USDT-BRL")
+            if book.get("source") != "Mercado Bitcoin (Live Book)":
+                raise RuntimeError(f"Fonte não negociável: {book.get('source', 'desconhecida')}")
             _, vwap_ask, slippage = OrderbookScanner.calculate_vwap_slippage(
                 book["asks"], target_volume_usd
             )
             latency_ms = (time.time() - start_time) * 1000.0
             return vwap_ask, slippage, latency_ms
         except Exception as e:
-            logger.debug(f"Falha na leitura direta L2: {e}. Aplicando modelo estocástico de contingência.")
-            latency_ms = random.uniform(35.0, 95.0)
-            await asyncio.sleep(latency_ms / 1000.0)
-            crypto_premium_pct = random.uniform(0.0070, 0.0110)
-            p_crypto_vwap = round(fiat_ask * (1.0 + crypto_premium_pct), 4)
-            slippage_pct = round(0.04 + (target_volume_usd / 2000.0) * 0.15, 3)
-            return p_crypto_vwap, slippage_pct, latency_ms
+            logger.warning(f"Livro L2 real indisponível; ciclo sem proposta acionável: {e}")
+            raise RuntimeError("Livro L2 real indisponível; proposta não acionável") from e
 
     def evaluate_spread(
         self,
