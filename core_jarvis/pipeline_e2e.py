@@ -52,7 +52,7 @@ try:
 except ImportError:
     from orchestrator import JarvisOrchestrator
 from risk_validator import RiskGuardrail, RiskGuardrailException
-from ledger_engine import AccountingLedger
+from ledger_engine import AccountingLedger, DuplicateProposalError
 from spread_detector import ArbitrageProposal, AsyncSpreadDetector
 from emit_posthog_event import capture_laus_event
 
@@ -263,14 +263,38 @@ class LausE2EPipeline:
 
         # 6. Registro de simulação paper (sem envio ou confirmação de ordem)
         # Os valores registrados são estimativas do simulador, não execução nem apuração fiscal
-        ledger_entry = self.ledger.record_arbitrage_trade(
-            symbol=proposal.symbol,
-            amount_usd=proposal.amount_usd,
-            rate=fiat_rate,
-            spread_pct=effective_spread_pct,
-            source=f"PAPER_SIMULATION_{self.environment.upper()}",
-            evidence=proposal.market_evidence,
-        )
+        try:
+            ledger_entry = self.ledger.record_arbitrage_trade(
+                symbol=proposal.symbol,
+                amount_usd=proposal.amount_usd,
+                rate=fiat_rate,
+                spread_pct=effective_spread_pct,
+                source=f"PAPER_SIMULATION_{self.environment.upper()}",
+                evidence=proposal.market_evidence,
+                proposal_id=proposal.proposal_id,
+            )
+        except DuplicateProposalError:
+            reason = "Proposta paper já registrada"
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "DUPLICATE_PROPOSAL",
+            })
+            capture_laus_event(
+                event_name="laus_duplicate_paper_proposal_rejected",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": "DUPLICATE_PROPOSAL",
+                },
+            )
+            return {
+                "success": False,
+                "status": "DUPLICATE_PROPOSAL",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+            }
 
         trade_record = {
             "proposal_id": proposal.proposal_id,
