@@ -438,29 +438,6 @@ class LausE2EPipeline:
                 "reason": reason,
                 "daily_paper_notional_usd": daily_state["paper_daily_notional_usd"],
             }
-        except (TypeError, ValueError) as exc:
-            reason = str(exc)
-            self.rejected_proposals.append({
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-                "status": "PAPER_LEDGER_INPUT_REJECTED",
-            })
-            capture_laus_event(
-                event_name="laus_paper_ledger_input_rejected",
-                distinct_id="pipeline_e2e",
-                properties={
-                    "proposal_id": proposal.proposal_id,
-                    "symbol": proposal.symbol,
-                    "status": "PAPER_LEDGER_INPUT_REJECTED",
-                    "guardrail_code": "PAPER_LEDGER_INPUT_REJECTED",
-                },
-            )
-            return {
-                "success": False,
-                "status": "PAPER_LEDGER_INPUT_REJECTED",
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-            }
         except DuplicateProposalError:
             reason = "Proposta paper já registrada"
             self.rejected_proposals.append({
@@ -484,6 +461,29 @@ class LausE2EPipeline:
                 "reason": reason,
             }
 
+        except (TypeError, ValueError) as exc:
+            reason = str(exc)
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "PAPER_LEDGER_INPUT_REJECTED",
+            })
+            capture_laus_event(
+                event_name="laus_paper_ledger_input_rejected",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": "PAPER_LEDGER_INPUT_REJECTED",
+                    "guardrail_code": "PAPER_LEDGER_INPUT_REJECTED",
+                },
+            )
+            return {
+                "success": False,
+                "status": "PAPER_LEDGER_INPUT_REJECTED",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+            }
         trade_record = {
             "proposal_id": proposal.proposal_id,
             "timestamp": time.time(),
