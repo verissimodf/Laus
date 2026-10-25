@@ -10,6 +10,7 @@ Unifies:
 
 import asyncio
 import logging
+import math
 import sys
 import time
 from pathlib import Path
@@ -146,6 +147,39 @@ class LausE2EPipeline:
         """
         Avalia e registra uma simulação paper; não envia nem liquida ordem real.
         """
+        # Valores contábeis chegam por parâmetros externos e não passam pelo guardrail de ordem.
+        accounting_inputs = {
+            "fiat_rate": fiat_rate,
+            "effective_spread_pct": effective_spread_pct,
+        }
+        for name, value in accounting_inputs.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                reason = f"{name} deve ser um número finito"
+                self.rejected_proposals.append({
+                    "proposal_id": proposal.proposal_id,
+                    "reason": reason,
+                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                })
+                return {
+                    "success": False,
+                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                    "proposal_id": proposal.proposal_id,
+                    "reason": reason,
+                }
+        if fiat_rate <= 0 or effective_spread_pct < 0:
+            reason = "fiat_rate deve ser positivo e effective_spread_pct não pode ser negativo"
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+            })
+            return {
+                "success": False,
+                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+            }
+
         # 1. Checagem do Kill Switch Central do Jarvis (Pilar 1)
         kill_switch_rejection = self._kill_switch_rejection(proposal)
         if kill_switch_rejection is not None:
