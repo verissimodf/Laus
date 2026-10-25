@@ -107,7 +107,10 @@ class LausMCPServer:
             },
             {
                 "name": "mcp_stage_order",
-                "description": "Valida uma proposta no Risk Guardrail; não envia nem executa ordem.",
+                "description": (
+                    "Valida apenas limites por ordem (valor e slippage); não consulta "
+                    "limites diários nem envia ou executa ordem."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -173,6 +176,8 @@ class LausMCPServer:
                     "symbol": symbol,
                     "amount_usd": amount_usd,
                     "slippage_pct": slippage,
+                    "validation_scope": "PER_ORDER_LIMITS_ONLY",
+                    "daily_paper_limits_checked": False,
                     "guardrail_authorized": True,
                     "order_submitted": False
                 }
@@ -191,6 +196,8 @@ class LausMCPServer:
                 return {
                     "status": "REJECTED_BY_GUARDRAIL",
                     "reason": str(e),
+                    "validation_scope": "PER_ORDER_LIMITS_ONLY",
+                    "daily_paper_limits_checked": False,
                     "guardrail_authorized": False,
                     "order_submitted": False
                 }
