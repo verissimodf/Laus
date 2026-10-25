@@ -122,6 +122,22 @@ class TestMarketEvidence(unittest.IsolatedAsyncioTestCase):
                 ledger.conn.close()
             os.remove(handle.name)
 
+    async def test_daily_summary_reads_only_current_utc_day_entries(self):
+        ledger = AccountingLedger(":memory:")
+        ledger.record_arbitrage_trade(
+            symbol="USDT-BRL",
+            amount_usd=100.0,
+            rate=5.0,
+            spread_pct=0.5,
+            source="PAPER_SIMULATION_TEST",
+        )
+
+        summary = ledger.get_daily_summary()
+
+        self.assertEqual(summary["paper_trade_count"], 1)
+        self.assertAlmostEqual(summary["paper_realized_pnl_usd"], 0.4)
+        self.assertTrue(summary["date_utc"])
+
     async def test_ledger_persists_evidence_json(self):
         ledger = AccountingLedger(":memory:")
         evidence = {"orderbook": {"source": "Mercado Bitcoin", "content_sha256": "c" * 64}}
