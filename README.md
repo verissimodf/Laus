@@ -161,6 +161,10 @@ Laus/
    docker compose up -d
    ```
 
+### Reset local do Kill Switch
+
+Após investigar e corrigir a causa da parada, execute `python -m core_jarvis.reset_kill_switch` na raiz do repositório. O comando mostra o motivo ativo, solicita o motivo da revisão e só libera o despacho após a confirmação literal `RESET KILL SWITCH`. O reset grava data UTC e justificativa no estado local. O recurso é local e não cria endpoint de reset no servidor MCP.
+
 ---
 
 ## 🔗 Referências e Inspirações Tecnológicas
