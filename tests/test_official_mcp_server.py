@@ -78,6 +78,35 @@ class TestOfficialMCPServer(unittest.TestCase):
                     {"spread_pct": invalid, "slippage_pct": 0.1},
                 )
 
+    def test_market_scan_exposes_source_freshness_provenance(self):
+        class Scanner:
+            @staticmethod
+            def fetch_live_orderbook(symbol):
+                return {
+                    "source": "Mercado Bitcoin (Live Book)",
+                    "symbol": symbol,
+                    "bids": [[5.0, 1000.0]],
+                    "asks": [[5.1, 1000.0]],
+                    "timestamp": 100,
+                    "source_timestamp": 99,
+                    "received_at": 100.0,
+                    "freshness_verified": True,
+                }
+
+            @staticmethod
+            def calculate_vwap_slippage(levels, amount):
+                return levels[0][0], levels[0][0], 0.0
+
+        backend = LausMCPServer(scanner=Scanner(), db_path=":memory:")
+        result = backend.handle_call_tool(
+            "mcp_market_scan_depth",
+            {"symbol": "USDT-BRL", "volume_usd": 250.0},
+        )
+
+        self.assertEqual(result["source_timestamp"], 99)
+        self.assertEqual(result["received_at"], 100.0)
+        self.assertTrue(result["freshness_verified"])
+
     def test_proposal_validation_does_not_submit_order(self):
         approved = validate_order_proposal("USDT-BRL", 100.0, 0.1)
         rejected = validate_order_proposal("USDT-BRL", -1.0, 0.1)
