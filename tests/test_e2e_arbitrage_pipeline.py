@@ -518,6 +518,15 @@ class TestRiskGuardrailInputValidation(unittest.TestCase):
             with self.subTest(amount=amount, slippage=slippage), self.assertRaises(self.exception):
                 self.guardrail.validate_order("USDT/BRL", amount, slippage)
 
+    def test_daily_limit_reads_environment_configuration(self):
+        import os
+        from unittest.mock import patch
+
+        with patch.dict(os.environ, {"MAX_DAILY_DRAWDOWN_USD": "125.5"}):
+            configured = RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.5)
+
+        self.assertEqual(configured.max_daily_drawdown_usd, 125.5)
+
     def test_rejects_proposal_after_daily_paper_loss_limit(self):
         with self.assertRaisesRegex(self.exception, "perda diária paper"):
             self.guardrail.validate_order(
