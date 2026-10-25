@@ -16,6 +16,10 @@ class DuplicateProposalError(ValueError):
     """Raised when a paper proposal has already been recorded."""
 
 
+class DailyPaperNotionalLimitError(ValueError):
+    """Raised when an atomic paper-ledger write would exceed the UTC daily notional cap."""
+
+
 class AccountingLedger:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
@@ -62,6 +66,7 @@ class AccountingLedger:
         source: str,
         evidence: Optional[Dict[str, Any]] = None,
         proposal_id: Optional[str] = None,
+        max_daily_notional_usd: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Record a paper estimate once per proposal ID and its source evidence."""
         for name, value in (
@@ -75,6 +80,14 @@ class AccountingLedger:
             raise ValueError("amount_usd deve ser positivo")
         if rate <= 0:
             raise ValueError("rate deve ser positivo")
+        if max_daily_notional_usd is not None:
+            if (
+                isinstance(max_daily_notional_usd, bool)
+                or not isinstance(max_daily_notional_usd, (int, float))
+                or not math.isfinite(max_daily_notional_usd)
+                or max_daily_notional_usd <= 0
+            ):
+                raise ValueError("max_daily_notional_usd deve ser positivo e finito")
         if proposal_id is not None:
             if not isinstance(proposal_id, str) or not proposal_id.strip():
                 raise ValueError("proposal_id deve ser uma string não vazia")
@@ -84,8 +97,28 @@ class AccountingLedger:
         net = gross_profit - fee
         tax_brl = (net * rate) * 0.15 if net > 0 else 0.0
         evidence_json = json.dumps(evidence, sort_keys=True, allow_nan=False) if evidence is not None else None
+        timestamp = int(time.time())
         try:
             with self.conn:
+                if max_daily_notional_usd is not None:
+                    # Lock the SQLite writer before reading the cap and keep the read + insert atomic.
+                    self.conn.execute("BEGIN IMMEDIATE")
+                    now_utc = datetime.fromtimestamp(timestamp, timezone.utc)
+                    day_start = int(
+                        now_utc.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+                    )
+                    current_notional = self.conn.execute(
+                        "SELECT COALESCE(SUM(amount_usd), 0) FROM journal_entries "
+                        "WHERE timestamp >= ?",
+                        (day_start,),
+                    ).fetchone()[0]
+                    projected_notional = current_notional + amount_usd
+                    if projected_notional > max_daily_notional_usd:
+                        raise DailyPaperNotionalLimitError(
+                            "Limite diário de volume paper atingido: "
+                            f"volume projetado={projected_notional} USD | "
+                            f"limite={max_daily_notional_usd} USD"
+                        )
                 cur = self.conn.execute(
                     """
                     INSERT INTO journal_entries (
@@ -95,7 +128,7 @@ class AccountingLedger:
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
-                        int(time.time()), symbol, "ARBITRAGE", amount_usd, rate,
+                        timestamp, symbol, "ARBITRAGE", amount_usd, rate,
                         gross_profit, fee, net, tax_brl, source, evidence_json, proposal_id,
                     ),
                 )
