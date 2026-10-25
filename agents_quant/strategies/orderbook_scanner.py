@@ -165,8 +165,14 @@ class OrderbookScanner:
             if restante_usd <= 0:
                 break
 
+        if restante_usd > max(1e-9, target_amount_usd * 1e-12):
+            volume_disponivel = target_amount_usd - restante_usd
+            raise ValueError(
+                "Liquidez insuficiente no livro: "
+                f"solicitado={target_amount_usd} USD, disponível={volume_disponivel} USD"
+            )
         if volume_total_executado == 0:
-            return preco_topo, preco_topo, 0.0
+            raise ValueError("Livro de ofertas sem liquidez executável")
 
         preco_medio_vwap = custo_total_brl / volume_total_executado
         slippage_pct = abs((preco_medio_vwap - preco_topo) / preco_topo) * 100.0

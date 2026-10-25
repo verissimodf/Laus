@@ -21,6 +21,22 @@ class TestOrderbookScannerValidation(unittest.TestCase):
             with self.subTest(book=book), self.assertRaises(ValueError):
                 OrderbookScanner.calculate_vwap_slippage(book, 10.0)
 
+    def test_rejects_target_volume_exceeding_available_depth(self):
+        with self.assertRaisesRegex(ValueError, "Liquidez insuficiente"):
+            OrderbookScanner.calculate_vwap_slippage(
+                [[5.0, 4.0], [5.1, 3.0]],
+                10.0,
+            )
+
+    def test_accepts_target_fully_covered_by_multiple_levels(self):
+        top, vwap, slippage = OrderbookScanner.calculate_vwap_slippage(
+            [[5.0, 4.0], [5.1, 6.0]],
+            10.0,
+        )
+        self.assertEqual(top, 5.0)
+        self.assertEqual(vwap, 5.06)
+        self.assertAlmostEqual(slippage, 1.2)
+
     def test_rejects_non_positive_and_non_finite_target_volume(self):
         for volume in (True, 0, -1.0, float("nan"), float("inf")):
             with self.subTest(volume=volume), self.assertRaises(ValueError):
