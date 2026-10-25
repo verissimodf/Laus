@@ -53,7 +53,7 @@ try:
 except ImportError:
     from orchestrator import JarvisOrchestrator
 from risk_validator import RiskGuardrail, RiskGuardrailException
-from ledger_engine import AccountingLedger, DuplicateProposalError
+from ledger_engine import AccountingLedger, DailyPaperNotionalLimitError, DuplicateProposalError
 from spread_detector import ArbitrageProposal, AsyncSpreadDetector
 from emit_posthog_event import capture_laus_event
 
@@ -326,7 +326,33 @@ class LausE2EPipeline:
                 source=f"PAPER_SIMULATION_{self.environment.upper()}",
                 evidence=proposal.market_evidence,
                 proposal_id=proposal.proposal_id,
+                max_daily_notional_usd=self.guardrail.max_daily_paper_notional_usd,
             )
+        except DailyPaperNotionalLimitError as exc:
+            reason = str(exc)
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "DAILY_PAPER_NOTIONAL_LIMIT",
+            })
+            capture_laus_event(
+                event_name="laus_order_vetoed_by_guardrail",
+                distinct_id="pipeline_e2e",
+                properties={
+                    "proposal_id": proposal.proposal_id,
+                    "symbol": proposal.symbol,
+                    "status": "DAILY_PAPER_NOTIONAL_LIMIT",
+                    "guardrail_code": "DAILY_PAPER_NOTIONAL_LIMIT",
+                },
+            )
+            daily_state = self.ledger.get_daily_summary()
+            return {
+                "success": False,
+                "status": "DAILY_PAPER_NOTIONAL_LIMIT",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "daily_paper_notional_usd": daily_state["paper_daily_notional_usd"],
+            }
         except DuplicateProposalError:
             reason = "Proposta paper já registrada"
             self.rejected_proposals.append({
