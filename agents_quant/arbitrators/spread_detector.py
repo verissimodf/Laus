@@ -286,7 +286,6 @@ class AsyncSpreadDetector:
                 net_spread_bps=opportunity.net_spread_bps,
                 estimated_slippage=opportunity.estimated_slippage_pct,
                 market_evidence=opportunity.market_evidence,
-                market_evidence=opportunity.market_evidence,
             )
 
         # 2. Debate Multiagente MiroFish Swarm (Pilar 2 & 7) antes do Guardrail
@@ -324,7 +323,7 @@ class AsyncSpreadDetector:
                     swarm_result=swarm_result,
                     net_spread_bps=opportunity.net_spread_bps,
                     estimated_slippage=opportunity.estimated_slippage_pct,
-                market_evidence=opportunity.market_evidence,
+                    market_evidence=opportunity.market_evidence,
                 )
                 self.proposals_history.append(proposal)
                 if self.on_proposal_created:
@@ -337,7 +336,6 @@ class AsyncSpreadDetector:
                 symbol=self.symbol,
                 amount_usd=amount_usd,
                 estimated_slippage=opportunity.estimated_slippage_pct,
-                market_evidence=opportunity.market_evidence,
             )
             approved = True
             status = "STAGED_FOR_MCP_EXECUTION"
@@ -362,6 +360,7 @@ class AsyncSpreadDetector:
             swarm_result=swarm_result,
             net_spread_bps=opportunity.net_spread_bps,
             estimated_slippage=opportunity.estimated_slippage_pct,
+            market_evidence=opportunity.market_evidence,
         )
 
         self.proposals_history.append(proposal)
