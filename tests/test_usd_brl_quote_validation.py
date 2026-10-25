@@ -26,6 +26,7 @@ class TestUsdBrlQuoteValidation(unittest.TestCase):
 
         self.assertEqual(quote["pair"], "USD-BRL")
         self.assertGreater(quote["ask"], quote["bid"])
+        self.assertTrue(quote["freshness_verified"])
 
     def test_rejects_missing_stale_future_and_non_finite_timestamps(self):
         invalid_timestamps = (
