@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+from dotenv import load_dotenv
+
 try:
     from .bus import EventBus
 except ImportError:
@@ -21,8 +23,10 @@ logger = logging.getLogger("LausJarvis")
 
 class JarvisOrchestrator:
     def __init__(self, bus: Optional[EventBus] = None, kill_switch_path: Optional[str] = None):
+        project_root = Path(__file__).resolve().parents[1]
+        load_dotenv(project_root / ".env", override=False)
         self.active_agents = {}
-        default_path = Path(__file__).resolve().parents[1] / ".laus_state" / "kill_switch.json"
+        default_path = project_root / ".laus_state" / "kill_switch.json"
         self.kill_switch_path = Path(
             kill_switch_path or os.environ.get("LAUS_KILL_SWITCH_PATH", str(default_path))
         )
