@@ -65,7 +65,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         except Exception:
             pass
 
-    async def test_01_happy_path_execution_and_ledger_recording(self):
+    async def test_01_paper_trade_is_recorded_without_claiming_execution(self):
         """Cenário 1: Proposta viável aprovada pelo Guardrail e registrada no Ledger com provisão IN 1888."""
         detector = AsyncSpreadDetector(
             symbol="USDT/BRL",
@@ -101,7 +101,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(result["success"])
-        self.assertEqual(result["status"], "EXECUTED_AND_RECORDED")
+        self.assertEqual(result["status"], "PAPER_TRADE_RECORDED")
         self.assertIn("ledger_result", result)
 
         ledger_res = result["ledger_result"]
@@ -316,7 +316,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         # Execute in Pipeline
         result = await pipeline.execute_pipeline_turn(proposal)
         self.assertTrue(result["success"])
-        self.assertEqual(result["status"], "EXECUTED_AND_RECORDED")
+        self.assertEqual(result["status"], "PAPER_TRADE_RECORDED")
         self.assertIsNotNone(result["swarm_result"])
 
         # Verify ledger has recorded trade
@@ -460,6 +460,29 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertIn("MacroMarketMaker", result["reason"])
         self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
 
+
+
+class TestRiskGuardrailInputValidation(unittest.TestCase):
+    def setUp(self):
+        from risk_validator import RiskGuardrail, RiskGuardrailException
+        self.guardrail = RiskGuardrail()
+        self.exception = RiskGuardrailException
+
+    def test_rejects_non_positive_amount(self):
+        for amount in (0, -1):
+            with self.subTest(amount=amount), self.assertRaises(self.exception):
+                self.guardrail.validate_order("USDT/BRL", amount, 0.1)
+
+    def test_rejects_non_finite_values(self):
+        for amount, slippage in ((float("nan"), 0.1), (250, float("inf"))):
+            with self.subTest(amount=amount, slippage=slippage), self.assertRaises(self.exception):
+                self.guardrail.validate_order("USDT/BRL", amount, slippage)
+
+    def test_rejects_negative_slippage_and_empty_symbol(self):
+        with self.assertRaises(self.exception):
+            self.guardrail.validate_order("USDT/BRL", 250, -0.1)
+        with self.assertRaises(self.exception):
+            self.guardrail.validate_order(" ", 250, 0.1)
 
 if __name__ == "__main__":
     unittest.main()
