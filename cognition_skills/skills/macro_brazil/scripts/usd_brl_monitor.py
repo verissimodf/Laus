@@ -8,8 +8,10 @@ calculando o spread cambial contra pares de stablecoin (USDT/BRL, USDC/BRL).
 """
 
 import json
+import math
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,6 +27,7 @@ DEFAULT_MAKER_TAKER_FEE = 0.0010  # 0.10%
 DEFAULT_WITHDRAWAL_FEE_BRL = 5.00  # R$ 5,00
 DEFAULT_PIX_FEE = 0.0000          # PIX PJ/PF isento ou fixo
 DEFAULT_SLIPPAGE = 0.0005         # 0.05% de slippage médio
+MAX_USD_BRL_QUOTE_AGE_SECONDS = 120.0
 
 
 def _http_get_json(url: str, timeout: int = 10) -> Any:
@@ -41,6 +44,25 @@ def _http_get_json(url: str, timeout: int = 10) -> Any:
         return json.loads(raw_data)
 
 
+def _validate_quote_timestamp(value: Any, now: Optional[float] = None) -> float:
+    if isinstance(value, bool):
+        raise ValueError("Timestamp da cotação USD-BRL ausente ou inválido")
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Timestamp da cotação USD-BRL ausente ou inválido") from exc
+    if not math.isfinite(timestamp):
+        raise ValueError("Timestamp da cotação USD-BRL deve ser finito")
+    if timestamp > 1e14:
+        timestamp /= 1e6
+    elif timestamp > 1e11:
+        timestamp /= 1e3
+    age_seconds = (time.time() if now is None else now) - timestamp
+    if age_seconds < -2.0 or age_seconds > MAX_USD_BRL_QUOTE_AGE_SECONDS:
+        raise ValueError(f"Cotação USD-BRL fora da janela de frescor ({age_seconds:.3f}s)")
+    return timestamp
+
+
 def fetch_usd_brl_quote() -> Dict[str, Any]:
     """
     Obtém a cotação oficial do dólar comercial brasileiro da AwesomeAPI.
@@ -53,14 +75,33 @@ def fetch_usd_brl_quote() -> Dict[str, Any]:
         raise ValueError(f"Resposta inesperada da AwesomeAPI: {data}")
     
     quote = data["USDBRL"]
+    bid = float(quote["bid"])
+    ask = float(quote["ask"])
+    high = float(quote["high"])
+    low = float(quote["low"])
+    pct_change = float(quote["pctChange"])
+    for name, value in (
+        ("bid", bid),
+        ("ask", ask),
+        ("high", high),
+        ("low", low),
+        ("pctChange", pct_change),
+    ):
+        if not math.isfinite(value):
+            raise ValueError(f"{name} da cotação USD-BRL deve ser finito")
+    if bid <= 0 or ask <= 0 or high <= 0 or low <= 0 or ask < bid or high < low:
+        raise ValueError("Faixa de preços da cotação USD-BRL inválida")
+    timestamp = quote.get("timestamp")
+    _validate_quote_timestamp(timestamp)
     return {
         "pair": "USD-BRL",
-        "bid": float(quote["bid"]),
-        "ask": float(quote["ask"]),
-        "high": float(quote["high"]),
-        "low": float(quote["low"]),
-        "pct_change": float(quote["pctChange"]),
-        "timestamp": quote.get("timestamp"),
+        "bid": bid,
+        "ask": ask,
+        "high": high,
+        "low": low,
+        "pct_change": pct_change,
+        "timestamp": timestamp,
+        "freshness_verified": True,
         "create_date": quote.get("create_date"),
     }
 
