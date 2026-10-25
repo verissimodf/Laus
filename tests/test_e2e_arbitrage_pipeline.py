@@ -197,6 +197,41 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(summary["lucro_liquido_usd"], 0)
         self.assertGreater(summary["provisao_ir_brl"], 0)
 
+    async def test_kill_switch_activated_during_final_validation_blocks_ledger_write(self):
+        from unittest.mock import patch
+
+        proposal = ArbitrageProposal(
+            proposal_id="PROP-KILL-SWITCH-RACE",
+            timestamp=time.time(),
+            symbol="USDT/BRL",
+            side="buy",
+            amount_usd=100.0,
+            target_price=5.0,
+            expected_net_profit_usd=1.0,
+            latency_ms=30.0,
+            guardrail_approved=True,
+            status="STAGED_FOR_MCP_EXECUTION",
+            estimated_slippage=0.1,
+        )
+        original_validate = self.guardrail.validate_order
+
+        def validate_then_activate_kill_switch(*args, **kwargs):
+            result = original_validate(*args, **kwargs)
+            self.orchestrator.trigger_kill_switch("activated during final validation")
+            return result
+
+        with patch.object(
+            self.guardrail,
+            "validate_order",
+            side_effect=validate_then_activate_kill_switch,
+        ):
+            result = await self.pipeline.execute_pipeline_turn(proposal)
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["status"], "ABORTED_BY_KILL_SWITCH")
+        self.assertEqual(self.ledger.get_summary()["total_operacoes"], 0)
+        self.assertEqual(self.pipeline.executed_trades, [])
+
     async def test_duplicate_proposal_is_recorded_only_once(self):
         proposal = ArbitrageProposal(
             proposal_id="PROP-IDEMPOTENCY-TEST",
