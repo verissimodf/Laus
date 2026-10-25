@@ -119,7 +119,7 @@ class LausE2EPipeline:
         effective_spread_pct: float = 0.75,
     ) -> Dict[str, Any]:
         """
-        Executa um ciclo completo de decisão e liquidação para a proposta fornecida.
+        Avalia e registra uma simulação paper; não envia nem liquida ordem real.
         """
         # 1. Checagem do Kill Switch Central do Jarvis (Pilar 1)
         if self.orchestrator.emergency_stop:
