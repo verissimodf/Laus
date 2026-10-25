@@ -1,4 +1,6 @@
+import os
 import unittest
+from unittest.mock import patch
 
 from gateway_vault.mcp_servers.laus_mcp import LausMCPServer
 from gateway_vault.mcp_servers.official_server import (
@@ -17,6 +19,16 @@ class TestOfficialMCPServer(unittest.TestCase):
         self.assertTrue(callable(simulate_swarm))
         self.assertTrue(callable(validate_order_proposal))
         self.assertTrue(callable(verify_bank))
+
+    def test_mcp_guardrail_uses_environment_risk_limits(self):
+        with patch.dict(
+            os.environ,
+            {"MAX_ORDER_USD": "80.0", "MAX_SLIPPAGE_PCT": "0.15"},
+        ):
+            backend = LausMCPServer(db_path=":memory:")
+
+        self.assertEqual(backend.guardrail.max_order_usd, 80.0)
+        self.assertEqual(backend.guardrail.max_slippage_pct, 0.15)
 
     def test_legacy_trade_settlement_tool_is_disabled(self):
         backend = LausMCPServer(db_path=":memory:")

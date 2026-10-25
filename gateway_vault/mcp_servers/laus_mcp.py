@@ -73,7 +73,7 @@ class LausMCPServer:
     ):
         self.scanner = scanner or OrderbookScanner()
         self.swarm = swarm or MiroFishSwarmSimulator()
-        self.guardrail = guardrail or RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.50)
+        self.guardrail = guardrail or RiskGuardrail()
         
         target_db = db_path or str(project_root / "accounting_ledger" / "laus_vault.db")
         self.ledger = ledger or AccountingLedger(target_db)
