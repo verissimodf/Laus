@@ -38,3 +38,5 @@ logs/
 .antigravity/
 .DS_Store
 Thumbs.db
+# Estado local e persistente do kill switch
+.laus_state/
