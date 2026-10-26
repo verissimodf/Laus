@@ -11,6 +11,7 @@ Unifies:
 import asyncio
 import logging
 import math
+import os
 import sys
 import time
 from pathlib import Path
@@ -52,10 +53,10 @@ try:
     from .orchestrator import JarvisOrchestrator
 except ImportError:
     from orchestrator import JarvisOrchestrator
-from risk_validator import RiskGuardrail, RiskGuardrailException
-from ledger_engine import AccountingLedger, DailyPaperDrawdownLimitError, DailyPaperNotionalLimitError, DuplicateProposalError
-from spread_detector import ArbitrageProposal, AsyncSpreadDetector
-from emit_posthog_event import capture_laus_event
+from gateway_vault.guardrail.risk_validator import RiskGuardrail, RiskGuardrailException
+from accounting_ledger.ledger_engine import AccountingLedger, DailyPaperDrawdownLimitError, DailyPaperNotionalLimitError, DuplicateProposalError
+from agents_quant.arbitrators.spread_detector import ArbitrageProposal, AsyncSpreadDetector
+from cognition_skills.skills.posthog_telemetry.scripts.emit_posthog_event import capture_laus_event
 
 try:
     from agents_quant.mirofish_simulator.swarm_orchestrator import SwarmOrchestrator
@@ -100,7 +101,7 @@ class LausE2EPipeline:
         else:
             self.swarm_orchestrator = swarm_orchestrator
         
-        target_db = db_path or str(project_root / "accounting_ledger" / "laus_vault.db")
+        target_db = db_path or os.environ.get("LAUS_LEDGER_PATH", str(project_root / "accounting_ledger" / "laus_vault.db"))
         self.ledger = ledger or AccountingLedger(target_db)
         if (
             isinstance(min_spread_bps, bool)
@@ -147,48 +148,35 @@ class LausE2EPipeline:
             "reason": "Emergency stop is active in JarvisOrchestrator",
         }
 
-    async def execute_pipeline_turn(
+    async def execute_pipeline_turn(self, proposal, fiat_rate=None, effective_spread_pct=None):
+        # Persist every decision, including rejected and replayed proposals.
+        try:
+            result = await self._execute_pipeline_turn(proposal, fiat_rate, effective_spread_pct)
+        except (TypeError, ValueError, OverflowError) as exc:
+            result = {"success": False, "status": "PAPER_LEDGER_INPUT_REJECTED",
+                      "proposal_id": proposal.proposal_id, "reason": str(exc)}
+        self.ledger.record_decision(proposal.proposal_id, result)
+        await self.flush_outbox()
+        return result
+
+    async def flush_outbox(self):
+        import json
+        pending = self.ledger.conn.execute("SELECT entry_id,payload FROM paper_outbox WHERE published=0 ORDER BY entry_id").fetchall()
+        for entry_id, payload in pending:
+            # Independent of the emergency gate: facts already committed must be delivered.
+            await self.orchestrator.bus.publish("execution.fills", json.loads(payload))
+            with self.ledger.conn:
+                self.ledger.conn.execute("UPDATE paper_outbox SET published=1 WHERE entry_id=?", (entry_id,))
+
+    async def _execute_pipeline_turn(
         self,
         proposal: ArbitrageProposal,
-        fiat_rate: float = 5.0240,
-        effective_spread_pct: float = 0.75,
+        fiat_rate: Optional[float] = None,
+        effective_spread_pct: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Avalia e registra uma simulação paper; não envia nem liquida ordem real.
         """
-        # Valores contábeis chegam por parâmetros externos e não passam pelo guardrail de ordem.
-        accounting_inputs = {
-            "fiat_rate": fiat_rate,
-            "effective_spread_pct": effective_spread_pct,
-        }
-        for name, value in accounting_inputs.items():
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-                reason = f"{name} deve ser um número finito"
-                self.rejected_proposals.append({
-                    "proposal_id": proposal.proposal_id,
-                    "reason": reason,
-                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
-                })
-                return {
-                    "success": False,
-                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
-                    "proposal_id": proposal.proposal_id,
-                    "reason": reason,
-                }
-        if fiat_rate <= 0:
-            reason = "fiat_rate deve ser positivo"
-            self.rejected_proposals.append({
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
-            })
-            return {
-                "success": False,
-                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
-                "proposal_id": proposal.proposal_id,
-                "reason": reason,
-            }
-
         # 1. Checagem do Kill Switch Central do Jarvis (Pilar 1)
         kill_switch_rejection = self._kill_switch_rejection(proposal)
         if kill_switch_rejection is not None:
@@ -356,7 +344,7 @@ class LausE2EPipeline:
                     "symbol": proposal.symbol,
                     "status": status,
                     "guardrail_code": status,
-                    "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                    "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) and not isinstance(spread_bps, bool) and math.isfinite(spread_bps) else None,
                     "minimum_spread_bps": self.min_spread_bps,
                 },
             )
@@ -365,9 +353,67 @@ class LausE2EPipeline:
                 "status": status,
                 "proposal_id": proposal.proposal_id,
                 "reason": reason,
-                "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) else None,
+                "spread_bps": spread_bps if isinstance(spread_bps, (int, float)) and not isinstance(spread_bps, bool) and math.isfinite(spread_bps) else None,
                 "minimum_spread_bps": self.min_spread_bps,
             }
+
+        fiat_rate = proposal.fiat_ask if fiat_rate is None else fiat_rate
+        # net_spread_bps already includes all detector fees and slippage.
+        net_contract = effective_spread_pct is None
+        if net_contract:
+            spread = proposal.net_spread_bps
+            effective_spread_pct = spread / 100.0 if isinstance(spread, (int, float)) and not isinstance(spread, bool) else None
+        # Valores contábeis chegam por parâmetros externos e não passam pelo guardrail de ordem.
+        accounting_inputs = {
+            "fiat_rate": fiat_rate,
+            "effective_spread_pct": effective_spread_pct,
+        }
+        for name, value in accounting_inputs.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                reason = f"{name} deve ser um número finito"
+                self.rejected_proposals.append({
+                    "proposal_id": proposal.proposal_id,
+                    "reason": reason,
+                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                })
+                return {
+                    "success": False,
+                    "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                    "proposal_id": proposal.proposal_id,
+                    "reason": reason,
+                }
+        if fiat_rate <= 0:
+            reason = "fiat_rate deve ser positivo"
+            self.rejected_proposals.append({
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+            })
+            return {
+                "success": False,
+                "status": "PAPER_ACCOUNTING_INPUT_REJECTED",
+                "proposal_id": proposal.proposal_id,
+                "reason": reason,
+            }
+
+        # Preserve the modeled fill and all included costs alongside source hashes.
+        gross_pct = effective_spread_pct
+        fee_usd = None
+        if net_contract:
+            gross_pct = proposal.gross_spread_pct if proposal.gross_spread_pct is not None else effective_spread_pct
+            fee_usd = proposal.amount_usd * (gross_pct - effective_spread_pct) / 100.0
+        execution = {
+            "model": "paper_round_trip_estimate_v1", "fiat_ask_brl": fiat_rate,
+            "crypto_vwap_brl": proposal.target_price, "quantity_usdt": proposal.amount_usd,
+            "principal_brl": proposal.amount_usd * fiat_rate,
+            "net_spread_pct": effective_spread_pct if net_contract else None,
+            "modeled_costs_usd": fee_usd,
+        }
+        evidence = dict(proposal.market_evidence) if isinstance(proposal.market_evidence, dict) else proposal.market_evidence
+        if evidence is None:
+            evidence = {}
+        if isinstance(evidence, dict):
+            evidence["paper_execution"] = execution
 
         # Revalida o latch imediatamente antes de gravar o lançamento paper.
         kill_switch_rejection = self._kill_switch_rejection(proposal)
@@ -381,9 +427,10 @@ class LausE2EPipeline:
                 symbol=proposal.symbol,
                 amount_usd=proposal.amount_usd,
                 rate=fiat_rate,
-                spread_pct=effective_spread_pct,
+                fee_usd=fee_usd,
+                spread_pct=gross_pct,
                 source=f"PAPER_SIMULATION_{self.environment.upper()}",
-                evidence=proposal.market_evidence,
+                evidence=evidence,
                 proposal_id=proposal.proposal_id,
                 max_daily_notional_usd=self.guardrail.max_daily_paper_notional_usd,
                 max_daily_drawdown_usd=self.guardrail.max_daily_drawdown_usd,

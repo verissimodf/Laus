@@ -1,5 +1,7 @@
 # Laus — Plataforma Autônoma de Agentes e Arbitragem (8 Pilares)
 
+> **Entrega paper de 26/10/2026:** consulte a [matriz de requisitos e lotes](docs/entrega-lotes-2026-10-26.md), o [manual operacional](docs/operacao-paper.md) e as [evidências de validação](docs/validation-paper.json). O runtime paper usa SQLite durável, worker e console compartilhando o estado de emergência; sua configuração executável é `docker-compose.paper.yml`. O Compose original permanece uma descrição experimental de serviços da arquitetura-alvo. A observação supervisionada e o escopo integral continuam sujeitos aos aceites documentados.
+
 # ⚡ Laus — Autonomous Quant, Swarm & Jarvis Ecosystem
 
 [![Self-Hosted](https://img.shields.io/badge/Architecture-Self--Hosted-0A0E17?style=for-the-badge&logo=docker&logoColor=00F0FF)](#)
@@ -7,7 +9,7 @@
 [![AgentSkills](https://img.shields.io/badge/Standard-AgentSkills_(SKILL.md)-0A0E17?style=for-the-badge&logo=markdown&logoColor=F59E0B)](#)
 [![Mode](https://img.shields.io/badge/Mode-Paper_Only-0A0E17?style=for-the-badge&logo=python&logoColor=3B82F6)](#)
 
-> **Estado atual do código:** Laus é experimental e opera somente em modo paper. O pipeline registra estimativas e não envia ordens a corretoras ([pipeline](core_jarvis/pipeline_e2e.py)); o gateway MCP oferece leitura, simulação e validação limitada a valor e slippage por ordem, sem consulta aos limites diários do ledger ou liquidação ([servidor MCP](gateway_vault/mcp_servers/official_server.py)). O guardrail lê limites de ordem e slippage do ambiente, interrompe o registro paper quando o PnL realizado diário atinge o limite e restringe o notional paper acumulado por dia UTC; esse volume simulado não mede exposição nem risco projetado de uma conta real. O ledger SQLite é uma estimativa simplificada; o pipeline rejeita a regravação paper da mesma proposta pelo ID. O ledger não implementa partidas dobradas nem conformidade fiscal ([ledger](accounting_ledger/ledger_engine.py)). A telemetria PostHog exige ativação explícita e token de projeto ([emissor](cognition_skills/skills/posthog_telemetry/scripts/emit_posthog_event.py)). As seções abaixo descrevem a arquitetura-alvo e itens em evolução, não capacidades já disponíveis em produção.
+> **Estado atual do código:** Laus é experimental e opera somente em modo paper. O pipeline registra estimativas e não envia ordens a corretoras ([pipeline](core_jarvis/pipeline_e2e.py)); o gateway MCP oferece leitura, simulação e validação limitada a valor e slippage por ordem, sem consulta aos limites diários do ledger ou liquidação ([servidor MCP](gateway_vault/mcp_servers/official_server.py)). O guardrail lê limites de ordem e slippage do ambiente, interrompe o registro paper quando o PnL realizado diário atinge o limite e restringe o notional paper acumulado por dia UTC; esse volume simulado não mede exposição nem risco projetado de uma conta real. O ledger SQLite registra estimativas paper com partidas de PnL balanceadas e rejeita a regravação da mesma proposta pelo ID. Ainda faltam inventário patrimonial completo e conformidade fiscal ([ledger](accounting_ledger/ledger_engine.py)). A telemetria PostHog exige ativação explícita e token de projeto ([emissor](cognition_skills/skills/posthog_telemetry/scripts/emit_posthog_event.py)). As seções abaixo descrevem a arquitetura-alvo e itens em evolução, não capacidades já disponíveis em produção.
 
 
 **Laus** é uma plataforma pessoal, auto-hospedada (*self-hosted*) e orientada a eventos que unifica **orquestração cognitiva estilo Jarvis**, **motores quantitativos de alta frequência e arbitragem**, **simulação multiagente em enxame (Swarm)** e **governança financeira/fiscal rigorosa**.
@@ -153,12 +155,12 @@ Laus/
 1. **Clone o repositório** na sua pasta sincronizada ou servidor local e marque-a como **Disponível Offline**.
 2. Copie o arquivo de variáveis de ambiente:
    ```bash
-   cp .env.example .env
+   python -m scripts.bootstrap_paper
    ```
 3. Abra a pasta raiz no **Google Antigravity Desktop** — o agente lerá automaticamente o arquivo `AGENTS.md` e `ARCHITECTURE.md` para manter a padronização dos 8 pilares.
 4. Suba a infraestrutura base em modo de simulação (*Shadow Mode*):
    ```bash
-   docker compose up -d
+   docker compose -f docker-compose.paper.yml up --build -d --wait
    ```
 
 ### Reset local do Kill Switch
@@ -216,14 +218,14 @@ Clone o repositório na sua pasta sincronizada ou servidor local e marque-a como
 
 Copie o arquivo de variáveis de ambiente:
 
-cp .env.example .env
+python -m scripts.bootstrap_paper
 
 
 Abra a pasta raiz no Google Antigravity Desktop — o agente lerá automaticamente o arquivo AGENTS.md e ARCHITECTURE.md para manter a padronização dos 8 pilares.
 
 Suba a infraestrutura base em modo de simulação (Shadow Mode):
 
-docker compose up -d
+docker compose -f docker-compose.paper.yml up --build -d --wait
 
 
 🔗 Referências e Inspirações Tecnológicas

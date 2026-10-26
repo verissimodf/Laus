@@ -34,7 +34,7 @@ if str(strategies_dir) not in sys.path:
 
 swarm_dir = project_root / "agents_quant" / "mirofish_sim"
 if str(swarm_dir) not in sys.path:
-    sys.path.insert(0, str(swarm_dir))
+    sys.path.append(str(swarm_dir))
 
 ledger_dir = project_root / "accounting_ledger"
 if str(ledger_dir) not in sys.path:

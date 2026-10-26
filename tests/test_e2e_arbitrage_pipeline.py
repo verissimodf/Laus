@@ -32,12 +32,12 @@ sys.path.insert(0, str(project_root / "agents_quant" / "arbitrators"))
 sys.path.insert(0, str(project_root / "agents_quant" / "mirofish_simulator"))
 sys.path.insert(0, str(project_root / "cognition_skills" / "skills" / "posthog_telemetry" / "scripts"))
 
-from orchestrator import JarvisOrchestrator
-from risk_validator import RiskGuardrail
-from ledger_engine import AccountingLedger, DailyPaperDrawdownLimitError, DailyPaperNotionalLimitError
-from spread_detector import ArbitrageProposal, AsyncSpreadDetector, SpreadOpportunity
-from pipeline_e2e import LausE2EPipeline
-from swarm_orchestrator import SwarmOrchestrator
+from core_jarvis.orchestrator import JarvisOrchestrator
+from gateway_vault.guardrail.risk_validator import RiskGuardrail
+from accounting_ledger.ledger_engine import AccountingLedger, DailyPaperDrawdownLimitError, DailyPaperNotionalLimitError
+from agents_quant.arbitrators.spread_detector import ArbitrageProposal, AsyncSpreadDetector, SpreadOpportunity
+from core_jarvis.pipeline_e2e import LausE2EPipeline
+from agents_quant.mirofish_simulator.swarm_orchestrator import SwarmOrchestrator
 
 
 class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
@@ -49,6 +49,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
         self.db_path = self.temp_db.name
 
         self.kill_switch_path = self.db_path + ".kill_switch.json"
+        Path(self.kill_switch_path).write_text(json.dumps({"active": False, "reason": None}), encoding="utf-8")
         self.orchestrator = JarvisOrchestrator(kill_switch_path=self.kill_switch_path)
         self.ledger = AccountingLedger(self.db_path)
         self.guardrail = RiskGuardrail(max_order_usd=500.0, max_slippage_pct=0.50)
@@ -176,6 +177,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
                     symbol="USDT/BRL",
                     side="buy",
                     amount_usd=100.0,
+                    fiat_ask=5.0240,
                     target_price=5.0,
                     expected_net_profit_usd=1.0,
                     latency_ms=30.0,
@@ -301,6 +303,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -333,12 +336,14 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
                     symbol="USDT/BRL",
                     side="buy",
                     amount_usd=100.0,
+                    fiat_ask=5.0240,
                     target_price=5.0,
                     expected_net_profit_usd=1.0,
                     latency_ms=30.0,
                     guardrail_approved=True,
                     status="STAGED_FOR_MCP_EXECUTION",
                     estimated_slippage=0.1,
+                    net_spread_bps=100,
                 )
                 result = await self.pipeline.execute_pipeline_turn(
                     proposal,
@@ -361,6 +366,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -392,6 +398,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -425,6 +432,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -553,6 +561,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=200.0,
+            fiat_ask=5.0240,
             target_price=5.0500,
             expected_net_profit_usd=1.50,
             latency_ms=35.0,
@@ -860,6 +869,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -890,6 +900,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=100.0,
+            fiat_ask=5.0240,
             target_price=5.0,
             expected_net_profit_usd=1.0,
             latency_ms=30.0,
@@ -924,6 +935,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
             symbol="USDT/BRL",
             side="buy",
             amount_usd=250.0,
+            fiat_ask=5.0240,
             target_price=5.0500,
             expected_net_profit_usd=2.00,
             latency_ms=40.0,
@@ -952,7 +964,7 @@ class TestLausE2EArbitragePipeline(unittest.IsolatedAsyncioTestCase):
 
 class TestRiskGuardrailInputValidation(unittest.TestCase):
     def setUp(self):
-        from risk_validator import RiskGuardrail, RiskGuardrailException
+        from gateway_vault.guardrail.risk_validator import RiskGuardrail, RiskGuardrailException
         self.guardrail = RiskGuardrail()
         self.exception = RiskGuardrailException
 

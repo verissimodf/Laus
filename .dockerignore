@@ -1,0 +1,16 @@
+.git
+.env
+.env.*.local
+.laus_state
+*.db
+*.db-wal
+*.db-shm
+__pycache__
+*.log
+secrets
+vault
+.codex
+.aws
+.antigravity
+*.sqlite3
+docs/validation-*.json

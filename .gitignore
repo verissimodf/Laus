@@ -27,6 +27,8 @@ __pycache__/
 # Bancos de Dados Locais e Arquivos Temporários de Teste
 *.sqlite3
 *.db
+*.db-wal
+*.db-shm
 tmp/
 temp/
 logs/
