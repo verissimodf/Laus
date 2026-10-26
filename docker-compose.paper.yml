@@ -1,0 +1,55 @@
+# Self-contained local paper deployment. No exchange keys or live executor.
+x-app: &app
+  build: .
+  image: laus-paper:local
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  environment: &environment
+    LAUS_ENVIRONMENT: shadow
+    LAUS_STATE_DIR: /state
+    LAUS_KILL_SWITCH_PATH: /state/kill_switch.json
+    LAUS_LEDGER_PATH: /state/paper.db
+    MAX_ORDER_USD: ${MAX_ORDER_USD:-500}
+    MAX_SLIPPAGE_PCT: ${MAX_SLIPPAGE_PCT:-0.50}
+    MAX_DAILY_DRAWDOWN_USD: ${MAX_DAILY_DRAWDOWN_USD:-250}
+    MAX_DAILY_PAPER_NOTIONAL_USD: ${MAX_DAILY_PAPER_NOTIONAL_USD:-2500}
+    POSTHOG_ENABLED: "false"
+  volumes: [paper_state:/state]
+  networks: [paper]
+services:
+  worker:
+    <<: *app
+    healthcheck:
+      test: [CMD, python, -m, resilience_edge.healthcheck]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  console:
+    <<: *app
+    command: [python, -m, uvicorn, console_ui.server:app, --host, 0.0.0.0, --port, "8090"]
+    ports: ["127.0.0.1:8090:8090"]
+    environment:
+      <<: *environment
+      LAUS_CONSOLE_USERNAME: ${LAUS_CONSOLE_USERNAME:?Configure console username}
+      LAUS_CONSOLE_PASSWORD: ${LAUS_CONSOLE_PASSWORD:?Configure console password}
+    healthcheck:
+      test: [CMD, python, -c, "import socket; socket.create_connection(('127.0.0.1',8090),3).close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+  mcp:
+    <<: *app
+    profiles: [tools]
+    command: [python, -m, gateway_vault.mcp_servers.official_server]
+    stdin_open: true
+    restart: "no"
+volumes:
+  paper_state:
+networks:
+  paper:
+    driver: bridge

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 from dotenv import load_dotenv
+from core_jarvis.state import kill_switch_path as default_kill_switch_path, read_kill_switch
 
 try:
     from .bus import EventBus
@@ -28,10 +29,7 @@ class JarvisOrchestrator:
         project_root = Path(__file__).resolve().parents[1]
         load_dotenv(project_root / ".env", override=False)
         self.active_agents = {}
-        default_path = project_root / ".laus_state" / "kill_switch.json"
-        self.kill_switch_path = Path(
-            kill_switch_path or os.environ.get("LAUS_KILL_SWITCH_PATH", str(default_path))
-        )
+        self.kill_switch_path = Path(kill_switch_path) if kill_switch_path else default_kill_switch_path()
         self.emergency_stop, self.emergency_stop_reason = self._load_kill_switch()
         self.bus = bus or EventBus()
         logger.info(
@@ -41,17 +39,7 @@ class JarvisOrchestrator:
 
     def _load_kill_switch(self):
         """Carrega o latch persistido; corrupção/leitura negada bloqueia por segurança."""
-        try:
-            with self.kill_switch_path.open("r", encoding="utf-8") as state_file:
-                state = json.load(state_file)
-            if not isinstance(state, dict) or not isinstance(state.get("active"), bool):
-                raise ValueError("formato de estado inválido")
-            return state["active"], state.get("reason")
-        except FileNotFoundError:
-            return False, None
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            logger.critical("Estado do kill switch ilegível; bloqueando despacho: %s", exc)
-            return True, "KILL_SWITCH_STATE_UNREADABLE"
+        return read_kill_switch(self.kill_switch_path)
 
     def refresh_kill_switch(self) -> bool:
         """Refresh a persisted activation without allowing an external reset to clear the latch."""

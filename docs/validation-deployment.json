@@ -1,0 +1,78 @@
+{
+  "timestamp_utc": "2026-10-26T18:36:21.797014+00:00",
+  "unauthenticated_status": 401,
+  "authenticated_status": 200,
+  "worker_restart_healthy": true,
+  "restore": {
+    "snapshot": "/state/acceptance-20261026T183558Z",
+    "restore_balanced": true,
+    "emergency_halted": true
+  },
+  "console_bindings": [
+    {
+      "HostIp": "127.0.0.1",
+      "HostPort": "8090"
+    }
+  ],
+  "image_id": "sha256:e62d3319559597023ccaf2de3aabd22bb5935ffef72b87f1a7a44cdc6126a47c",
+  "services": [
+    {
+      "Command": "\"python -m uvicorn c\u2026\"",
+      "CreatedAt": "2026-10-26 15:35:15 -0300 -03",
+      "Engine": "",
+      "ExitCode": 0,
+      "Health": "healthy",
+      "ID": "21da0591b046",
+      "Image": "laus-paper:local",
+      "Labels": "com.docker.compose.replace=console-1,com.docker.compose.version=5.6.0,desktop.docker.io/ports/8090/tcp=127.0.0.1:8090,com.docker.compose.container-number=1,com.docker.compose.depends_on=,com.docker.compose.oneoff=False,com.docker.compose.project.config_files=C:\\Users\\layte\\OneDrive\\LAUS\\docker-compose.paper.yml,com.docker.compose.project.working_dir=C:\\Users\\layte\\OneDrive\\LAUS,com.docker.compose.service=console,desktop.docker.io/ports.scheme=v2,com.docker.compose.config-hash=4ca7df7e58ecaf862445bcaf3991d28ac73d1181cc4e536dfa7a4f4e53904037,com.docker.compose.image=sha256:71f36586bbd3507b8222dc227e89b8c34ed7ca1e7e4cb35c50c89d10b8ec6834,com.docker.compose.project=laus",
+      "LocalVolumes": "1",
+      "Mounts": "laus_paper_sta\u2026",
+      "Name": "laus-console-1",
+      "Names": "laus-console-1",
+      "Networks": "laus_paper",
+      "Ports": "127.0.0.1:8090->8090/tcp",
+      "Project": "laus",
+      "Publishers": [
+        {
+          "URL": "127.0.0.1",
+          "TargetPort": 8090,
+          "PublishedPort": 8090,
+          "Protocol": "tcp"
+        }
+      ],
+      "RunningFor": "About a minute ago",
+      "Service": "console",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up 17 seconds (healthy)"
+    },
+    {
+      "Command": "\"python -m core_jarv\u2026\"",
+      "CreatedAt": "2026-10-26 15:35:15 -0300 -03",
+      "Engine": "",
+      "ExitCode": 0,
+      "Health": "healthy",
+      "ID": "9bf74fb86b60",
+      "Image": "laus-paper:local",
+      "Labels": "com.docker.compose.service=worker,desktop.docker.io/ports.scheme=v2,com.docker.compose.depends_on=,com.docker.compose.oneoff=False,com.docker.compose.project=laus,com.docker.compose.version=5.6.0,com.docker.compose.config-hash=21efb1291de184d6d77c5e0ec6b919cc19377daaec33bf17475a499d71080bed,com.docker.compose.container-number=1,com.docker.compose.image=sha256:71f36586bbd3507b8222dc227e89b8c34ed7ca1e7e4cb35c50c89d10b8ec6834,com.docker.compose.project.config_files=C:\\Users\\layte\\OneDrive\\LAUS\\docker-compose.paper.yml,com.docker.compose.project.working_dir=C:\\Users\\layte\\OneDrive\\LAUS,com.docker.compose.replace=worker-1",
+      "LocalVolumes": "1",
+      "Mounts": "laus_paper_sta\u2026",
+      "Name": "laus-worker-1",
+      "Names": "laus-worker-1",
+      "Networks": "laus_paper",
+      "Ports": "",
+      "Project": "laus",
+      "Publishers": [],
+      "RunningFor": "About a minute ago",
+      "Service": "worker",
+      "Size": "0B",
+      "State": "running",
+      "Status": "Up 16 seconds (healthy)"
+    }
+  ],
+  "mode": "paper",
+  "emergency_halted": true,
+  "live_execution_enabled": false,
+  "remote_ci_verified": false,
+  "supervised_acceptance": false
+}

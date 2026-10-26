@@ -17,10 +17,10 @@ if str(project_root) not in sys.path:
 # Adiciona modulos necessarios ao path
 mirofish_dir = project_root / "agents_quant" / "mirofish_sim"
 if str(mirofish_dir) not in sys.path:
-    sys.path.insert(0, str(mirofish_dir))
+    sys.path.append(str(mirofish_dir))
 
 from swarm_simulator import MiroFishSwarmSimulator
-from digital_twin import DigitalTwinSandbox
+from agents_quant.mirofish_sim.digital_twin import DigitalTwinSandbox
 
 
 def evaluate_candidate_order(symbol: str = "USDT/BRL", amount_usd: float = 250.0, spread_pct: float = 0.85):

@@ -102,6 +102,9 @@ class ArbitrageProposal:
     net_spread_bps: Optional[float] = None
     estimated_slippage: Optional[float] = None
     market_evidence: Optional[Dict[str, Any]] = None
+    fiat_ask: Optional[float] = None
+    gross_spread_pct: Optional[float] = None
+    total_costs_pct: Optional[float] = None
 
 
 class AsyncSpreadDetector:
@@ -213,7 +216,7 @@ class AsyncSpreadDetector:
                 }),
             }
             _, vwap_ask, slippage = OrderbookScanner.calculate_vwap_slippage(
-                book["asks"], target_volume_usd
+                book["bids"], target_volume_usd
             )
             latency_ms = (time.time() - start_time) * 1000.0
             return vwap_ask, slippage, latency_ms
@@ -289,6 +292,9 @@ class AsyncSpreadDetector:
                 net_spread_bps=opportunity.net_spread_bps,
                 estimated_slippage=opportunity.estimated_slippage_pct,
                 market_evidence=opportunity.market_evidence,
+                fiat_ask=opportunity.p_fiat_ask,
+                gross_spread_pct=opportunity.gross_spread_pct,
+                total_costs_pct=opportunity.total_costs_pct,
             )
 
         # 2. Debate Multiagente MiroFish Swarm (Pilar 2 & 7) antes do Guardrail
@@ -327,6 +333,9 @@ class AsyncSpreadDetector:
                     net_spread_bps=opportunity.net_spread_bps,
                     estimated_slippage=opportunity.estimated_slippage_pct,
                     market_evidence=opportunity.market_evidence,
+                fiat_ask=opportunity.p_fiat_ask,
+                gross_spread_pct=opportunity.gross_spread_pct,
+                total_costs_pct=opportunity.total_costs_pct,
                 )
                 self.proposals_history.append(proposal)
                 if self.on_proposal_created:
@@ -377,6 +386,9 @@ class AsyncSpreadDetector:
             net_spread_bps=opportunity.net_spread_bps,
             estimated_slippage=opportunity.estimated_slippage_pct,
             market_evidence=opportunity.market_evidence,
+                fiat_ask=opportunity.p_fiat_ask,
+                gross_spread_pct=opportunity.gross_spread_pct,
+                total_costs_pct=opportunity.total_costs_pct,
         )
 
         self.proposals_history.append(proposal)

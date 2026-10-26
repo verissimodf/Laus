@@ -16,6 +16,27 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install declared dependencies
-        run: python -m pip install -r requirements.txt
+        run: python -m pip install -r requirements.lock.txt
       - name: Run unit and integration tests
         run: python -m unittest discover -s tests -p "test_*.py"
+      - name: Validate paper compose
+        env:
+          LAUS_CONSOLE_USERNAME: ci-operator
+          LAUS_CONSOLE_PASSWORD: ci-only-not-a-deployment-secret
+        run: docker compose -f docker-compose.paper.yml config --quiet
+      - name: Build and smoke-test isolated paper services
+        env:
+          LAUS_CONSOLE_USERNAME: ci-operator
+          LAUS_CONSOLE_PASSWORD: ci-only-not-a-deployment-secret
+        run: |
+          docker compose -f docker-compose.paper.yml up --build -d --wait --wait-timeout 180
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/)" = "401"
+          curl --fail -u "$LAUS_CONSOLE_USERNAME:$LAUS_CONSOLE_PASSWORD" http://127.0.0.1:8090/ | grep 'SHADOW / PAPER TRADING'
+          docker compose -f docker-compose.paper.yml restart worker
+          docker compose -f docker-compose.paper.yml up -d --wait --wait-timeout 90
+      - name: Shutdown paper services
+        if: always()
+        run: docker compose -f docker-compose.paper.yml down
+        env:
+          LAUS_CONSOLE_USERNAME: ci-operator
+          LAUS_CONSOLE_PASSWORD: ci-only-not-a-deployment-secret

@@ -9,6 +9,7 @@ import math
 from datetime import datetime, timezone
 import sqlite3
 import time
+from decimal import Decimal, ROUND_HALF_EVEN
 from typing import Any, Dict, Optional
 
 
@@ -27,10 +28,28 @@ class DailyPaperDrawdownLimitError(ValueError):
 class AccountingLedger:
     def __init__(self, db_path: str):
         self.conn = sqlite3.connect(db_path)
+        self.conn.execute("PRAGMA busy_timeout=10000")
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_db()
 
     def _init_db(self):
         with self.conn:
+            self.conn.executescript("""
+                CREATE TABLE IF NOT EXISTS paper_postings (
+                    entry_id INTEGER NOT NULL, account TEXT NOT NULL,
+                    amount_microusd INTEGER NOT NULL,
+                    PRIMARY KEY(entry_id, account),
+                    FOREIGN KEY(entry_id) REFERENCES journal_entries(id)
+                );
+                CREATE TABLE IF NOT EXISTS paper_decisions (
+                    id INTEGER PRIMARY KEY, proposal_id TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL, result_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS paper_outbox (
+                    entry_id INTEGER PRIMARY KEY, payload TEXT NOT NULL,
+                    published INTEGER NOT NULL DEFAULT 0
+                );
+            """)
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS journal_entries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -72,6 +91,7 @@ class AccountingLedger:
         proposal_id: Optional[str] = None,
         max_daily_notional_usd: Optional[float] = None,
         max_daily_drawdown_usd: Optional[float] = None,
+        fee_usd: Optional[float] = None,
     ) -> Dict[str, Any]:
         """Record a paper estimate once per proposal ID and its source evidence."""
         for name, value in (
@@ -101,9 +121,13 @@ class AccountingLedger:
                 raise ValueError("proposal_id deve ser uma string não vazia")
             proposal_id = proposal_id.strip()
         gross_profit = amount_usd * (spread_pct / 100.0)
-        fee = amount_usd * 0.001
+        fee = amount_usd * 0.001 if fee_usd is None else fee_usd
+        if isinstance(fee, bool) or not isinstance(fee, (int, float)) or not math.isfinite(fee) or fee < 0:
+            raise ValueError("fee_usd deve ser finito e não negativo")
         net = gross_profit - fee
         tax_brl = (net * rate) * 0.15 if net > 0 else 0.0
+        if not all(math.isfinite(v) for v in (gross_profit, net, tax_brl)):
+            raise ValueError("Derived paper amounts must be finite")
         try:
             evidence_json = (
                 json.dumps(evidence, sort_keys=True, allow_nan=False)
@@ -155,6 +179,20 @@ class AccountingLedger:
                         gross_profit, fee, net, tax_brl, source, evidence_json, proposal_id,
                     ),
                 )
+                def micro(value):
+                    return int((Decimal(str(value)) * 1_000_000).quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
+                gross_micro, fee_micro = micro(gross_profit), micro(fee)
+                # Signed debit amounts: assets + expenses - income = 0.
+                self.conn.executemany(
+                    "INSERT INTO paper_postings VALUES (?, ?, ?)",
+                    [(cur.lastrowid, "Asset:PaperCash:USD", gross_micro - fee_micro),
+                     (cur.lastrowid, "Expense:PaperFees:USD", fee_micro),
+                     (cur.lastrowid, "Income:PaperArbitrage:USD", -gross_micro)],
+                )
+                self.conn.execute("INSERT INTO paper_outbox(entry_id,payload) VALUES (?,?)",
+                                  (cur.lastrowid, json.dumps({"proposal_id": proposal_id,
+                                   "ledger_entry_id": cur.lastrowid, "net_profit_usd": round(net, 4),
+                                   "scope": "paper"}, allow_nan=False)))
         except sqlite3.IntegrityError:
             if proposal_id is not None and self.conn.execute(
                 "SELECT 1 FROM journal_entries WHERE proposal_id = ?", (proposal_id,)
@@ -169,6 +207,23 @@ class AccountingLedger:
             "evidence": evidence,
             "proposal_id": proposal_id,
         }
+
+    def record_decision(self, proposal_id, result):
+        payload = json.dumps(result, sort_keys=True, allow_nan=False)
+        with self.conn:
+            self.conn.execute("INSERT INTO paper_decisions(proposal_id,timestamp,result_json) VALUES (?,?,?)",
+                              (proposal_id, int(time.time()), payload))
+
+    def reconcile(self):
+        unbalanced = self.conn.execute(
+            "SELECT entry_id FROM paper_postings GROUP BY entry_id HAVING SUM(amount_microusd) <> 0"
+        ).fetchall()
+        uncovered = self.conn.execute(
+            "SELECT COUNT(*) FROM journal_entries j WHERE NOT EXISTS "
+            "(SELECT 1 FROM paper_postings p WHERE p.entry_id=j.id)"
+        ).fetchone()[0]
+        return {"balanced": not unbalanced and uncovered == 0,
+                "unbalanced_entries": [r[0] for r in unbalanced], "legacy_uncovered_entries": uncovered}
 
     def get_daily_summary(self) -> Dict[str, Any]:
         """Return UTC-day paper results; this is not a broker/account balance."""

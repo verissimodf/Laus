@@ -1,11 +1,18 @@
 import time
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from cognition_skills.skills.macro_brazil.scripts import usd_brl_monitor
 
 
 class TestUsdBrlQuoteValidation(unittest.TestCase):
+    def setUp(self):
+        # Keep boundary assertions independent of CPU load and wall-clock movement.
+        clock = patch.object(usd_brl_monitor, "time", SimpleNamespace(time=lambda: 1_800_000_000.0))
+        clock.start()
+        self.addCleanup(clock.stop)
+
     @staticmethod
     def payload(**overrides):
         quote = {
@@ -14,7 +21,7 @@ class TestUsdBrlQuoteValidation(unittest.TestCase):
             "high": "5.10",
             "low": "4.90",
             "pctChange": "0.2",
-            "timestamp": str(int(time.time())),
+            "timestamp": "1800000000",
             "create_date": "2026-10-25 12:00:00",
         }
         quote.update(overrides)
@@ -31,8 +38,8 @@ class TestUsdBrlQuoteValidation(unittest.TestCase):
     def test_rejects_missing_stale_future_and_non_finite_timestamps(self):
         invalid_timestamps = (
             None,
-            str(int(time.time()) - 121),
-            str(int(time.time()) + 3),
+            "1799999879",
+            "1800000003",
             "nan",
         )
         for timestamp in invalid_timestamps:

@@ -1,0 +1,40 @@
+{
+  "timestamp_utc": "2026-10-26T18:33:29.253542+00:00",
+  "transport": "stdio",
+  "containerized": true,
+  "tools": [
+    "laus_market_scan_depth",
+    "laus_simulate_swarm",
+    "laus_validate_order_proposal",
+    "laus_verify_bank"
+  ],
+  "validation_result": {
+    "meta": {
+      "io.modelcontextprotocol/serverInfo": {
+        "name": "Laus Safe Gateway",
+        "version": ""
+      }
+    },
+    "content": [
+      {
+        "type": "text",
+        "text": "{\n  \"status\": \"PROPOSAL_VALIDATED\",\n  \"symbol\": \"USDT-BRL\",\n  \"amount_usd\": 100.0,\n  \"slippage_pct\": 0.1,\n  \"validation_scope\": \"PER_ORDER_LIMITS_ONLY\",\n  \"daily_paper_limits_checked\": false,\n  \"guardrail_authorized\": true,\n  \"order_submitted\": false\n}",
+        "annotations": null,
+        "meta": null
+      }
+    ],
+    "structured_content": {
+      "status": "PROPOSAL_VALIDATED",
+      "symbol": "USDT-BRL",
+      "amount_usd": 100.0,
+      "slippage_pct": 0.1,
+      "validation_scope": "PER_ORDER_LIMITS_ONLY",
+      "daily_paper_limits_checked": false,
+      "guardrail_authorized": true,
+      "order_submitted": false
+    },
+    "is_error": false,
+    "result_type": "complete"
+  },
+  "live_execution_enabled": false
+}

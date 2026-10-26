@@ -1,7 +1,7 @@
 """
 Barramento de Eventos Assíncrono (Pilar 1 - Laus Core)
 Suporta publicação e subscrição (Pub/Sub) para comunicação inter-agentes e inter-pilares.
-Opera com contingência automática: tenta conexão Redis Streams e faz fallback transparente para filas assíncronas em memória.
+Implementação de desenvolvimento em memória. Para persistência paper use DurableEventBus.
 """
 
 import asyncio
